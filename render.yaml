@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: proofledger-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: PROOFLEDGER_ENV
+        value: production
+      - key: PROOFLEDGER_CORS_ORIGINS
+        sync: false
+      - key: PROOFLEDGER_GEMINI_API_KEY
+        sync: false
+      - key: PROOFLEDGER_GEMINI_MODEL
+        value: gemini-2.5-flash
