@@ -26,3 +26,18 @@ Controller actions never mutate the normalized source record. A separately hashe
 creates a derived evidence overlay, after which reconciliation, controls, graph construction, and
 certificate eligibility are recomputed. Review authority can add evidence but cannot bypass a
 failed accounting equation.
+
+## ADR-006: Atomic, signed CSV ingestion
+
+Uploads are untrusted and staged before authority enters the evidence layer. File shape, mapping,
+amount unit, and every row are validated before an all-or-nothing commit. The resulting manifest
+binds the source-file SHA-256, controller-confirmed mapping, canonical record hashes, timestamp,
+and signing public key; an Ed25519 signature makes post-import mutation detectable. The demo uses
+an ephemeral key, while production requires a KMS/HSM-backed trust anchor.
+
+## ADR-007: Header-only AI schema assistance
+
+Schema ambiguity benefits from language understanding, but finance rows may contain sensitive
+data and AI cannot be authoritative. Gemini receives column names and allowed targets only. Its
+response is constrained to those values, cannot invoke commit, and resets controller confirmation.
+Deterministic aliases remain the offline fallback.

@@ -7,9 +7,15 @@ ProofLedger separates deterministic financial authority from probabilistic assis
 ~~~text
 merchant orders ─┐
 payment recon ────┤
-refund register ──┼─> normalization + evidence hashing
+refund register ──┼─> bounded staging + confirmed schema mapping
 bank statement ───┤             │
 general ledger ───┘             ▼
+                    atomic normalization + signed manifest
+                                │
+                                ▼
+                         evidence hashing
+                                │
+                                ▼
                          object/event graph
                                 │
                  ┌──────────────┼──────────────┐
@@ -39,6 +45,23 @@ Each normalized record carries:
 Pydantic freezes records after validation. Certificate verification recalculates the source hash
 instead of trusting the stored value.
 
+## Ingestion boundary
+
+The intake service accepts UTF-8 CSV/TSV/text exports up to 5 MB, 10,000 rows, 60 columns, and
+5,000 characters per cell. It rejects NUL bytes, duplicate/empty headers, ragged rows, invalid
+dates, negative amounts, reused mappings, and incomplete required schemas. Preview is a staging
+operation only. Commit validates every row before storing any record, so a single invalid row
+rejects the entire batch.
+
+Deterministic aliases/fuzzy header scores produce the first mapping. Optional Gemini receives only
+the source column names, target field names, and deterministic proposal. Its response is allow-list
+validated and remains unconfirmed; the controller must review the mapping and amount unit.
+
+Every commit creates an Ed25519-signed manifest containing the original file SHA-256, confirmed
+mapping, normalized record hashes, import timestamp, and public key. Verification recomputes the
+manifest hash, signature, and every record hash. The demo key is generated at process start; a
+production verifier must pin a tenant key or trust a KMS-backed certificate chain.
+
 ## Object-centric graph
 
 The graph is bipartite at its evidence layer:
@@ -62,9 +85,10 @@ An invariant in the domain model rejects any semantic decision marked auto-appro
 
 ## AI boundary
 
-The optional Gemini adapter receives a serialized deterministic control result. Its prompt forbids
-inventing records or approving a close, and its output is parsed into a strict response schema.
-Failure or absence of Gemini returns a deterministic explanation. Gemini never runs inside:
+The optional Gemini adapters receive either a serialized deterministic control result or a list of
+column names—never uploaded row values. Prompts forbid inventing records or approving a close, and
+outputs are parsed into strict response schemas plus allow-list validation. Failure or absence of
+Gemini returns deterministic behavior. Gemini never runs inside:
 
 - money calculations;
 - control pass/fail logic;
@@ -94,4 +118,4 @@ replace the workspace with durable repositories and authenticated connectors.
 
 The React console consumes typed API contracts. Chart and graph views are lazy-loaded. The UI
 does not compute authoritative finance results; it displays server-side decisions and invokes
-server-side certificate operations.
+server-side import, manifest, and certificate operations.

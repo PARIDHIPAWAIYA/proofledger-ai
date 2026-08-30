@@ -169,3 +169,67 @@ export type GraphData = {
     relationship: string;
   }>;
 };
+
+export type IngestionSource =
+  | "razorpay_settlements"
+  | "bank_statement"
+  | "general_ledger";
+
+export type MappingSuggestion = {
+  canonical_field: string;
+  source_column: string | null;
+  confidence: number;
+  method: string;
+  required: boolean;
+};
+
+export type IngestionPreview = {
+  upload_id: string;
+  source_type: IngestionSource;
+  filename: string;
+  file_sha256: string;
+  size_bytes: number;
+  row_count: number;
+  headers: string[];
+  sample_rows: Array<Record<string, string>>;
+  suggestions: MappingSuggestion[];
+  required_fields: string[];
+  warnings: string[];
+  expires_at: string;
+};
+
+export type IngestionManifest = {
+  manifest_id: string;
+  upload_id: string;
+  source_type: IngestionSource;
+  filename: string;
+  file_sha256: string;
+  size_bytes: number;
+  row_count: number;
+  record_count: number;
+  field_mapping: Record<string, string>;
+  amount_unit: "rupees" | "paise";
+  record_hashes: Record<string, string>;
+  imported_at: string;
+  signature_algorithm: "Ed25519";
+  signing_public_key: string;
+  manifest_hash: string;
+  signature: string;
+};
+
+export type IngestionCommitResponse = {
+  manifest: IngestionManifest;
+  records_preview: Evidence[];
+};
+
+export type IngestionVerification = {
+  valid: boolean;
+  checks: Record<string, boolean>;
+  failures: string[];
+};
+
+export type AIMappingResponse = {
+  mapping: Record<string, string | null>;
+  generated_by: string;
+  warning: string;
+};

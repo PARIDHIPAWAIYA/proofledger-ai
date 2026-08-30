@@ -8,7 +8,19 @@ money lifecycle, abstains when evidence is unsafe, and emits a verifiable close 
 
 Show **Close command** and point to records, critical exceptions, and safe automation.
 
-## 0:35–1:20 — One graph across five systems
+## 0:35–1:30 — Real file to signed evidence
+
+Open **Evidence intake** and click **Run judge-ready demo file**.
+
+- Point out the original file SHA-256 and read-only sample.
+- Show deterministic mapping confidence and click **Improve with bounded AI**.
+- Stress that only headers go to Gemini and controller confirmation resets.
+- Confirm the mapping, sign the import, verify it, then simulate a ₹1 mutation.
+
+Key sentence: “AI helps understand the shape; deterministic code validates the money; the signed
+manifest makes every accepted row challengeable.”
+
+## 1:30–2:10 — One graph across five systems
 
 Open **Lifecycle graph** on settlement 0000.
 
@@ -19,7 +31,7 @@ order → captured payment → settlement → bank credit → journal.
 Key sentence: “A refund and a payout do not fit one spreadsheet case ID, so the graph preserves
 their real many-to-many lifecycle.”
 
-## 1:20–2:15 — Deterministic controls
+## 2:10–2:50 — Deterministic controls
 
 Open **Settlements**, choose settlement 0002, and show:
 
@@ -32,7 +44,7 @@ Key sentence: “Gemini did not decide this. Integer-paise accounting did.”
 
 Try issuing a certificate. The API returns a conflict naming the blocking control.
 
-## 2:15–3:25 — Safe abstention and evidence-bound review
+## 2:50–3:55 — Safe abstention and evidence-bound review
 
 Open **Evidence review**.
 
@@ -48,7 +60,7 @@ API refuses a duplicate evidence row and requires source correction.
 
 Key sentence: “A human can add a missing fact, but cannot vote a broken equation into passing.”
 
-## 3:25–4:20 — Balanced journal and proof certificate
+## 3:55–4:40 — Balanced journal and proof certificate
 
 Return to settlement 0000.
 
@@ -61,7 +73,7 @@ Then click **Change ₹1**. Verification must fail on evidence_hashes_match.
 
 Key sentence: “The certificate carries the claim and the evidence hashes needed to challenge it.”
 
-## 4:20–5:10 — Honest benchmark
+## 4:40–5:25 — Honest benchmark
 
 Open **Safety benchmark**.
 
@@ -73,12 +85,12 @@ Explain:
 
 State clearly that results are synthetic.
 
-## 5:10–6:00 — AI boundary and job signal
+## 5:25–6:00 — AI boundary and job signal
 
-“AI only explains deterministic exceptions and phrases evidence questions. It cannot approve
-matches, journals, or financial close. The repository includes domain invariants, 23 backend/API
-tests, frontend lint/tests/build, CI, a production dependency audit, Docker deployment, and honest
-limitations.”
+“AI only explains deterministic exceptions and suggests mappings from header names. It cannot see
+transaction rows or approve imports, matches, journals, or financial close. The repository includes
+domain invariants, 30 backend/API tests, frontend lint/tests/build, CI, a production dependency
+audit, Docker deployment, and honest limitations.”
 
 Finish on the dashboard with: “ProofLedger is not another finance chatbot. It is an evidence and
 control system with AI at the language boundary.”

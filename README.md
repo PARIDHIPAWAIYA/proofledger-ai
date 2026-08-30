@@ -14,16 +14,19 @@ The product thesis is simple: **finance teams need proof, not a confident-lookin
 Generic reconciliation tools flatten rows and return a match score. ProofLedger instead:
 
 1. Reconstructs an object/event graph across five financial sources.
-2. Applies exact and composite evidence before any probabilistic assistance.
-3. Abstains when candidate evidence is unsafe or ambiguous.
-4. Asks the smallest question likely to resolve that uncertainty.
-5. Hashes controller evidence separately, preserves the original source row, and recomputes.
-6. Rejects review actions that try to mask an already-linked amount mismatch.
-7. Enforces ten deterministic accounting and lifecycle controls.
-8. Proposes a balanced journal that remains pending human approval.
-9. Issues a proof-carrying settlement certificate only when critical controls pass.
-10. Detects if any certified source evidence changes—even by ₹1.
-11. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
+2. Stages real CSV exports behind size, encoding, shape, and row-validation boundaries.
+3. Suggests schema mappings from headers only, then requires controller confirmation.
+4. Atomically normalizes accepted rows and seals them in an Ed25519-signed manifest.
+5. Applies exact and composite evidence before any probabilistic assistance.
+6. Abstains when candidate evidence is unsafe or ambiguous.
+7. Asks the smallest question likely to resolve that uncertainty.
+8. Hashes controller evidence separately, preserves the original source row, and recomputes.
+9. Rejects review actions that try to mask an already-linked amount mismatch.
+10. Enforces ten deterministic accounting and lifecycle controls.
+11. Proposes a balanced journal that remains pending human approval.
+12. Issues a proof-carrying settlement certificate only when critical controls pass.
+13. Detects if any imported or certified evidence changes—even by ₹1.
+14. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
 
 ## Demo result
 
@@ -45,6 +48,8 @@ The committed benchmark exposes its labels, methods, and caveats for inspection.
 ## Product tour
 
 - **Close command:** captured volume, close readiness, exception runway, and proof graph counts.
+- **Evidence intake:** real CSV preview, deterministic/AI-assisted header mapping, atomic import,
+  signed manifest export, and ₹1 tamper lab.
 - **Settlement book:** payout-by-payout evidence, controls, and balanced journal proposals.
 - **Evidence review:** attach the missing bank row, verify its UTR, and watch the close recompute.
 - **Lifecycle graph:** interactive order → payment → settlement → bank → ledger traversal.
@@ -58,7 +63,10 @@ Gemini is optional. When configured, it may:
 
 - explain a deterministic control result in plain language;
 - phrase the next evidence question;
-- assist a future schema-mapping workflow.
+- suggest a source-to-canonical schema mapping using column names only.
+
+Row values are never sent to Gemini. AI suggestions are constrained to existing source headers and
+canonical fields, cannot commit an import, and invalidate the controller confirmation checkbox.
 
 Gemini cannot accept a match, pass a control, approve a journal, alter a source record, or close
 a settlement. Without an API key, the same application works with a deterministic explanation
@@ -68,7 +76,8 @@ fallback.
 
 ~~~text
 Five source systems
-  └─> immutable, SHA-256-hashed evidence records
+  └─> bounded CSV staging + controller-confirmed mapping
+       └─> Ed25519 manifest + immutable, SHA-256-hashed evidence records
        └─> object-centric lifecycle graph
             ├─> exact / composite reconciliation
             ├─> calibrated candidate sets + safe abstention
@@ -93,7 +102,7 @@ apps/
   web/
     src/          React operator console
 docs/             architecture, controls, evaluation, demo, threat model
-tests/            finance engine, certificate, benchmark, and API tests
+tests/            ingestion, finance engine, certificate, benchmark, and API tests
 .github/workflows continuous integration
 ~~~
 
@@ -156,6 +165,11 @@ npm run build
 | GET /api/v1/reviews | Minimum-evidence review queue |
 | GET /api/v1/reviews/history | Append-only controller resolution trail |
 | POST /api/v1/reviews/{id}/resolve | Attach hashed evidence and recompute the close |
+| POST /api/v1/ingestion/preview | Stage, validate, sample, hash, and suggest CSV mappings |
+| POST /api/v1/ingestion/{upload_id}/ai-map | Header-only bounded mapping suggestion |
+| POST /api/v1/ingestion/commit | Atomically normalize records and sign the manifest |
+| GET /api/v1/ingestion/manifests | List committed import manifests |
+| POST /api/v1/ingestion/manifests/{id}/verify | Verify signature/records or simulate tampering |
 | GET /api/v1/benchmark | Held-out baseline comparison |
 | GET /api/v1/graph/{id} | Lifecycle graph for one settlement |
 | POST /api/v1/settlements/{id}/certificate | Issue certificate or return a blocking control |
@@ -172,11 +186,12 @@ npm run build
 
 ## Honest scope
 
-This project uses deterministic synthetic data inspired by public payment entity shapes. It does
-not claim access to Razorpay production data, move money, execute refunds, post a real journal, or
-provide tax/legal advice. Real deployment requires connector authentication, authorization,
-retention controls, maker-checker approval, observability, and validation on merchant-specific
-historical data.
+The built-in close scenario uses deterministic synthetic data inspired by public payment entity
+shapes; the evidence-intake lab also accepts local CSV exports. Imported files remain in process
+memory and are not yet connected to the demo dashboard dataset. This project does not claim access
+to Razorpay production data, move money, execute refunds, post a real journal, or provide tax/legal
+advice. Real deployment requires durable encrypted storage, tenant authentication, key management,
+retention controls, maker-checker approval, observability, and merchant-specific validation.
 
 See docs/limitations.md and docs/threat-model.md before treating this as production software.
 

@@ -18,6 +18,7 @@ from proofledger.domain.reconciliation import ReconciliationEngine
 from proofledger.domain.review import MinimumEvidenceReviewPlanner
 from proofledger.services.benchmark import ReconciliationBenchmark
 from proofledger.services.closing import JournalProposalService
+from proofledger.services.ingestion import IngestionService
 from proofledger.services.synthetic import DatasetBundle, SyntheticFinanceGenerator
 
 
@@ -39,6 +40,7 @@ class DemoWorkspace:
         }
         self.certificates: dict[str, SettlementCertificate] = {}
         self.review_resolutions: dict[str, ReviewResolution] = {}
+        self.ingestion = IngestionService()
 
     @property
     def effective_records(self) -> list[EvidenceRecord]:

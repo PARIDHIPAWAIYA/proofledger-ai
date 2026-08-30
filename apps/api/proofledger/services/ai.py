@@ -14,6 +14,14 @@ class AIExplanation(BaseModel):
     warning: str = "AI explanation is advisory and cannot approve a financial close."
 
 
+class SchemaMappingResponse(BaseModel):
+    mapping: dict[str, str | None]
+    generated_by: str
+    warning: str = (
+        "Header-only suggestion. A controller must confirm every mapping before import."
+    )
+
+
 class BoundedExceptionExplainer:
     """Use Gemini only for grounded language; controls remain deterministic."""
 
@@ -65,3 +73,71 @@ class BoundedExceptionExplainer:
             ),
             generated_by="deterministic-fallback",
         )
+
+
+class BoundedSchemaMapper:
+    """Suggest mappings from column names only; never receive or approve row data."""
+
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    def suggest(
+        self,
+        *,
+        source_type: str,
+        headers: list[str],
+        target_fields: list[str],
+        deterministic_mapping: dict[str, str | None],
+    ) -> SchemaMappingResponse:
+        fallback = SchemaMappingResponse(
+            mapping=deterministic_mapping,
+            generated_by="deterministic-fallback",
+        )
+        if not self.settings.gemini_api_key:
+            return fallback
+
+        try:
+            from google import genai
+            from google.genai import types
+
+            client = genai.Client(api_key=self.settings.gemini_api_key)
+            request = {
+                "source_type": source_type,
+                "source_column_names": headers,
+                "target_fields": target_fields,
+                "deterministic_suggestion": deterministic_mapping,
+            }
+            prompt = (
+                "Map only the supplied source column names to the supplied canonical "
+                "finance fields. A source column may be used at most once. Use null "
+                "when uncertain. Never invent columns. This is advisory and requires "
+                "human confirmation. No transaction values are included.\n\n"
+                f"MAPPING_REQUEST={request}"
+            )
+            response = client.models.generate_content(
+                model=self.settings.gemini_model,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0,
+                    response_mime_type="application/json",
+                    response_schema=SchemaMappingResponse,
+                ),
+            )
+            proposed = SchemaMappingResponse.model_validate_json(response.text or "{}")
+            allowed_targets = set(target_fields)
+            allowed_headers = set(headers)
+            clean = dict(deterministic_mapping)
+            used: set[str] = set()
+            for target, source in proposed.mapping.items():
+                if target not in allowed_targets or source not in allowed_headers:
+                    continue
+                if source in used:
+                    continue
+                clean[target] = source
+                used.add(source)
+            return SchemaMappingResponse(
+                mapping=clean,
+                generated_by=self.settings.gemini_model,
+            )
+        except Exception:
+            return fallback

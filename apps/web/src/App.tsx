@@ -7,6 +7,7 @@ import {
   Menu,
   Network,
   ShieldCheck,
+  UploadCloud,
   X,
 } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
@@ -14,11 +15,12 @@ import { LoadingState } from "./components/Shared";
 
 const BenchmarkPage = lazy(() => import("./components/BenchmarkPage"));
 const DashboardPage = lazy(() => import("./components/DashboardPage"));
+const DataIntakePage = lazy(() => import("./components/DataIntakePage"));
 const EvidenceGraphPage = lazy(() => import("./components/EvidenceGraphPage"));
 const ReviewPage = lazy(() => import("./components/ReviewPage"));
 const SettlementsPage = lazy(() => import("./components/SettlementsPage"));
 
-export type Page = "dashboard" | "settlements" | "reviews" | "graph" | "benchmark";
+export type Page = "dashboard" | "intake" | "settlements" | "reviews" | "graph" | "benchmark";
 
 const navigation: Array<{
   id: Page;
@@ -26,6 +28,7 @@ const navigation: Array<{
   icon: typeof LayoutDashboard;
 }> = [
   { id: "dashboard", label: "Close command", icon: LayoutDashboard },
+  { id: "intake", label: "Evidence intake", icon: UploadCloud },
   { id: "settlements", label: "Settlements", icon: FileCheck2 },
   { id: "reviews", label: "Evidence review", icon: ShieldCheck },
   { id: "graph", label: "Lifecycle graph", icon: Network },
@@ -112,6 +115,7 @@ function App() {
         </header>
         <Suspense fallback={<LoadingState />}>
           {page === "dashboard" && <DashboardPage onNavigate={navigate} />}
+          {page === "intake" && <DataIntakePage />}
           {page === "settlements" && <SettlementsPage />}
           {page === "reviews" && <ReviewPage />}
           {page === "graph" && <EvidenceGraphPage />}

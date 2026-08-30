@@ -5,17 +5,19 @@ from functools import lru_cache
 from typing import Annotated
 
 import networkx as nx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from proofledger.config import Settings, get_settings
+from proofledger.domain.ingestion import AmountUnit, IngestionSource
 from proofledger.domain.models import ControlStatus, SourceSystem
-from proofledger.services.ai import BoundedExceptionExplainer
+from proofledger.services.ai import BoundedExceptionExplainer, BoundedSchemaMapper
 from proofledger.services.closing import (
     CloseBlockedError,
     SettlementCertificateService,
     settlement_evidence,
 )
+from proofledger.services.ingestion import MAX_UPLOAD_BYTES, IngestionError
 from proofledger.services.workspace import DemoWorkspace
 
 router = APIRouter(prefix="/api/v1")
@@ -34,6 +36,19 @@ class ReviewResolutionRequest(BaseModel):
     evidence_sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
     actor: str = Field(min_length=3, max_length=120)
     rationale: str = Field(min_length=8, max_length=500)
+
+
+class IngestionCommitRequest(BaseModel):
+    upload_id: str = Field(min_length=4, max_length=80)
+    field_mapping: dict[str, str]
+    amount_unit: AmountUnit = AmountUnit.RUPEES
+
+
+def ingestion_http_error(error: IngestionError, status_code: int = 422) -> HTTPException:
+    return HTTPException(
+        status_code=status_code,
+        detail={"message": str(error), "errors": error.errors},
+    )
 
 
 @lru_cache
@@ -164,6 +179,80 @@ def evidence(
         "limit": limit,
         "items": records[offset : offset + limit],
     }
+
+
+@router.post("/ingestion/preview")
+async def preview_ingestion(
+    workspace: WorkspaceDependency,
+    source_type: Annotated[IngestionSource, Query()],
+    file: Annotated[UploadFile, File()],
+):
+    try:
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
+        return workspace.ingestion.preview(
+            file.filename or "upload.csv",
+            content,
+            source_type,
+        )
+    except IngestionError as error:
+        raise ingestion_http_error(error) from error
+
+
+@router.post("/ingestion/{upload_id}/ai-map")
+def suggest_ingestion_mapping(
+    upload_id: str,
+    settings: SettingsDependency,
+    workspace: WorkspaceDependency,
+):
+    try:
+        preview, fields = workspace.ingestion.mapping_context(upload_id)
+    except IngestionError as error:
+        raise ingestion_http_error(error, 404) from error
+    deterministic = {
+        item.canonical_field: item.source_column for item in preview.suggestions
+    }
+    return BoundedSchemaMapper(settings).suggest(
+        source_type=preview.source_type.value,
+        headers=preview.headers,
+        target_fields=[field.name for field in fields],
+        deterministic_mapping=deterministic,
+    )
+
+
+@router.post("/ingestion/commit")
+def commit_ingestion(
+    request: IngestionCommitRequest,
+    workspace: WorkspaceDependency,
+):
+    try:
+        manifest, records = workspace.ingestion.commit(
+            request.upload_id,
+            request.field_mapping,
+            request.amount_unit,
+        )
+    except IngestionError as error:
+        raise ingestion_http_error(error) from error
+    return {"manifest": manifest, "records_preview": records[:5]}
+
+
+@router.get("/ingestion/manifests")
+def ingestion_manifests(workspace: WorkspaceDependency):
+    return list(reversed(list(workspace.ingestion.manifests.values())))
+
+
+@router.post("/ingestion/manifests/{manifest_id}/verify")
+def verify_ingestion_manifest(
+    manifest_id: str,
+    request: TamperSimulationRequest,
+    workspace: WorkspaceDependency,
+):
+    try:
+        return workspace.ingestion.verify(
+            manifest_id,
+            simulate_tamper=request.simulate_tamper,
+        )
+    except IngestionError as error:
+        raise ingestion_http_error(error, 404) from error
 
 
 @router.get("/graph/{settlement_id}")

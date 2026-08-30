@@ -4,13 +4,22 @@ export async function api<T>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
+  const isFormData = options?.body instanceof FormData;
   const response = await fetch(`${API_BASE}${path}`, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
     ...options,
+    headers: isFormData
+      ? options?.headers
+      : { "Content-Type": "application/json", ...options?.headers },
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.detail ?? `Request failed: ${response.status}`);
+    const detail = payload.detail;
+    if (typeof detail === "string") throw new Error(detail);
+    if (detail?.message) {
+      const rows = Array.isArray(detail.errors) ? detail.errors.join(" · ") : "";
+      throw new Error(rows ? `${detail.message}: ${rows}` : detail.message);
+    }
+    throw new Error(`Request failed: ${response.status}`);
   }
   return response.json() as Promise<T>;
 }
