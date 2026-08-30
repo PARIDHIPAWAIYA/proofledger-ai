@@ -4,9 +4,11 @@
 - Candidate-set coverage depends on the calibration and evaluation distributions.
 - Proposed journals require professional accounting review before any production use.
 - The prototype does not implement authentication or multi-tenant isolation.
-- CSV uploads and signed manifests are stored in process memory and disappear on restart.
-- Activated imports participate in the controller workspace, but activation events and state are
-  not durably transactional and the supplied controller identity is not authenticated.
+- Temporary CSV previews are stored in process memory and expire after 30 minutes. Committed
+  manifests, normalized records, and ordered activation events are database-backed.
+- Review resolutions and issued close certificates still disappear on restart.
+- Activated imports participate in the controller workspace, but the supplied controller identity
+  is not authenticated and there is no maker-checker role enforcement.
 - Import activation adds evidence; it does not implement full source-period replacement, versioned
   corrections, or connector watermarks.
 - The ingestion signer uses an ephemeral process key. Its self-contained public key detects

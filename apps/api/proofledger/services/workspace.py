@@ -21,6 +21,7 @@ from proofledger.domain.review import MinimumEvidenceReviewPlanner
 from proofledger.services.benchmark import ReconciliationBenchmark
 from proofledger.services.closing import JournalProposalService
 from proofledger.services.ingestion import IngestionError, IngestionService
+from proofledger.services.persistence import SQLAlchemyIngestionRepository
 from proofledger.services.synthetic import DatasetBundle, SyntheticFinanceGenerator
 
 
@@ -32,6 +33,7 @@ class DemoWorkspace:
         seed: int = 2026,
         order_count: int = 600,
         settlement_size: int = 50,
+        repository: SQLAlchemyIngestionRepository | None = None,
     ) -> None:
         self.dataset: DatasetBundle = SyntheticFinanceGenerator(seed=seed).generate(
             order_count=order_count,
@@ -39,9 +41,25 @@ class DemoWorkspace:
         )
         self.certificates: dict[str, SettlementCertificate] = {}
         self.review_resolutions: dict[str, ReviewResolution] = {}
-        self.ingestion = IngestionService()
+        self.repository = repository
+        self.ingestion = IngestionService(repository)
         self.active_manifest_ids: set[str] = set()
-        self.ingestion_activations: list[IngestionActivation] = []
+        self.ingestion_activations = (
+            repository.load_activations() if repository else []
+        )
+        for event in self.ingestion_activations:
+            if not event.verify_integrity():
+                raise RuntimeError(
+                    f"persisted activation {event.activation_id} failed verification"
+                )
+            if event.manifest_id not in self.ingestion.manifests:
+                raise RuntimeError(
+                    f"activation {event.activation_id} references a missing manifest"
+                )
+            if event.action == ActivationAction.ACTIVATE:
+                self.active_manifest_ids.add(event.manifest_id)
+            else:
+                self.active_manifest_ids.discard(event.manifest_id)
 
     @property
     def active_import_records(self) -> list[EvidenceRecord]:
@@ -337,6 +355,12 @@ class DemoWorkspace:
             actor,
             rationale,
         )
+        if self.repository:
+            try:
+                self.repository.save_activation(event)
+            except Exception:
+                self.active_manifest_ids.remove(manifest_id)
+                raise
         self.ingestion_activations.append(event)
         return self._activation_outcome(event, before, after)
 
@@ -374,6 +398,12 @@ class DemoWorkspace:
             actor,
             rationale,
         )
+        if self.repository:
+            try:
+                self.repository.save_activation(event)
+            except Exception:
+                self.active_manifest_ids.add(manifest_id)
+                raise
         self.ingestion_activations.append(event)
         return self._activation_outcome(event, before, after)
 

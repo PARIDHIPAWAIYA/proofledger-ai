@@ -49,3 +49,11 @@ signed, inactive evidence batch. A separate activation verifies the signature an
 checks source-identity collisions and anti-masking rules, captures actor/rationale in an append-only
 hashed event, and recomputes all downstream outputs. Deactivation is equally explicit and auditable.
 Production must add authenticated maker-checker authorization and transactional period state.
+
+## ADR-009: Event-replayed import authority
+
+Committed manifests and their normalized records are persisted transactionally through SQLAlchemy.
+Activation state is not stored as a mutable boolean; it is reconstructed by replaying append-only
+activation/deactivation events in database sequence order. Startup refuses persisted objects whose
+model validation, record hashes, Ed25519 signature, hash set, or activation audit hash fails.
+SQLite keeps local setup frictionless while psycopg supports managed PostgreSQL in deployment.

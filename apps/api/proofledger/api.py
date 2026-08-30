@@ -18,6 +18,7 @@ from proofledger.services.closing import (
     settlement_evidence,
 )
 from proofledger.services.ingestion import MAX_UPLOAD_BYTES, IngestionError
+from proofledger.services.persistence import SQLAlchemyIngestionRepository
 from proofledger.services.workspace import DemoWorkspace
 
 router = APIRouter(prefix="/api/v1")
@@ -58,7 +59,10 @@ def ingestion_http_error(error: IngestionError, status_code: int = 422) -> HTTPE
 
 @lru_cache
 def get_workspace() -> DemoWorkspace:
-    return DemoWorkspace()
+    settings = get_settings()
+    return DemoWorkspace(
+        repository=SQLAlchemyIngestionRepository(settings.database_url)
+    )
 
 
 WorkspaceDependency = Annotated[DemoWorkspace, Depends(get_workspace)]

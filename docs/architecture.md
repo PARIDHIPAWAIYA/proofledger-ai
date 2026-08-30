@@ -69,6 +69,16 @@ records to the authoritative evidence view. Graphs, reconciliation, controls, re
 proposals, and certificates are derived again. Activation/deactivation events are append-only and
 carry their own canonical SHA-256 audit hash.
 
+## Persistence boundary
+
+SQLAlchemy stores committed manifests, normalized record payloads, and ordered activation events
+in one database. Import commit writes the manifest and all records in a single transaction.
+Activation events are append-only; active state is reconstructed by replaying them in database
+sequence order. On process startup, ProofLedger validates every stored Pydantic model, evidence
+hash, manifest hash, Ed25519 signature, record-hash set, and activation hash before hydrating the
+authoritative view. SQLite is the zero-configuration default; the same tables run on PostgreSQL
+through psycopg.
+
 ## Object-centric graph
 
 The graph is bipartite at its evidence layer:
@@ -117,10 +127,11 @@ that source discrepancy.
 
 ## Runtime
 
-The Buildathon demo uses an in-memory deterministic workspace so cloning the repository produces
-the same scenario without credentials. Signed imports and activation events also remain in memory.
-The domain layer is storage-agnostic; production would replace the workspace with durable
-repositories, authenticated connectors, transactional activation, and maker-checker authorization.
+The Buildathon demo regenerates the same deterministic base workspace so cloning the repository
+produces the scenario without credentials. Signed imports and activation events are database-backed;
+temporary CSV previews, review resolutions, and certificates remain in memory. Production would
+add authenticated connectors, encrypted tenant storage, durable review/certificate repositories,
+period locking, and maker-checker authorization.
 
 ## Frontend
 

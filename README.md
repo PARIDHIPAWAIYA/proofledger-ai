@@ -20,15 +20,16 @@ Generic reconciliation tools flatten rows and return a match score. ProofLedger 
 5. Separates signing from authority through a hashed controller activation event.
 6. Recomputes graphs, matches, controls, reviews, journals, and certificates after activation.
 7. Rejects duplicate bank rows that attempt to mask a known source mismatch.
-8. Applies exact and composite evidence before any probabilistic assistance.
-9. Abstains when candidate evidence is unsafe or ambiguous.
-10. Asks the smallest question likely to resolve that uncertainty.
-11. Hashes controller evidence separately, preserves the original source row, and recomputes.
-12. Enforces ten deterministic accounting and lifecycle controls.
-13. Proposes a balanced journal that remains pending human approval.
-14. Issues a proof-carrying settlement certificate only when critical controls pass.
-15. Detects if any imported or certified evidence changes—even by ₹1.
-16. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
+8. Persists signed batches and ordered activation authority through API restarts.
+9. Applies exact and composite evidence before any probabilistic assistance.
+10. Abstains when candidate evidence is unsafe or ambiguous.
+11. Asks the smallest question likely to resolve that uncertainty.
+12. Hashes controller evidence separately, preserves the original source row, and recomputes.
+13. Enforces ten deterministic accounting and lifecycle controls.
+14. Proposes a balanced journal that remains pending human approval.
+15. Issues a proof-carrying settlement certificate only when critical controls pass.
+16. Detects if any imported or certified evidence changes—even by ₹1.
+17. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
 
 ## Demo result
 
@@ -134,6 +135,10 @@ npm run dev
 Open http://localhost:5173. FastAPI documentation is available at
 http://localhost:8000/docs.
 
+Committed import manifests, normalized records, and activation events persist in the configured
+database. The default is `sqlite:///./proofledger.db`. PostgreSQL uses a standard SQLAlchemy URL,
+for example `postgresql+psycopg://user:password@host:5432/proofledger`.
+
 The demo does not require Gemini. To enable bounded explanations, copy .env.example to .env
 and set PROOFLEDGER_GEMINI_API_KEY.
 
@@ -142,6 +147,14 @@ Reproduce a workspace or benchmark directly:
 ~~~powershell
 proofledger summary
 proofledger --seed 11 --orders 120 --settlement-size 20 benchmark
+~~~
+
+Persist Docker data across container replacement:
+
+~~~powershell
+docker run --name proofledger -p 8000:8000 `
+  -e PROOFLEDGER_DATABASE_URL=sqlite:////data/proofledger.db `
+  -v proofledger-data:/data proofledger-ai:local
 ~~~
 
 ## Verify the repository
@@ -190,16 +203,18 @@ npm run build
   followed by /api/v1.
 - Backend CORS: set PROOFLEDGER_CORS_ORIGINS to the final frontend origin.
 - Gemini: PROOFLEDGER_GEMINI_API_KEY is optional and must remain server-side.
+- Database: set PROOFLEDGER_DATABASE_URL to managed PostgreSQL for durable deployment storage.
 
 ## Honest scope
 
 The built-in close scenario uses deterministic synthetic data inspired by public payment entity
 shapes; the evidence-intake lab also accepts local CSV exports. Activated imports participate in
 the same graph, reconciliation, controls, review queue, journal proposals, and certificates as the
-built-in evidence. State remains in process memory. This project does not claim access to Razorpay
-production data, move money, execute refunds, post a real journal, or provide tax/legal advice.
-Real deployment requires durable encrypted storage, tenant authentication, key management,
-retention controls, maker-checker approval, observability, and merchant-specific validation.
+built-in evidence. Signed imports and activation history persist in SQLite/PostgreSQL; temporary
+previews, review resolutions, and issued certificates remain in memory. This project does not claim
+access to Razorpay production data, move money, execute refunds, post a real journal, or provide
+tax/legal advice. Real deployment requires encrypted storage, tenant authentication, key
+management, retention controls, maker-checker approval, observability, and merchant validation.
 
 See docs/limitations.md and docs/threat-model.md before treating this as production software.
 

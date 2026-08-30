@@ -92,7 +92,7 @@ State clearly that results are synthetic.
 
 “AI only explains deterministic exceptions and suggests mappings from header names. It cannot see
 transaction rows or approve imports, matches, journals, or financial close. The repository includes
-domain invariants, 33 backend/API tests, frontend lint/tests/build, CI, a production dependency
+domain invariants, 35 backend/API tests, frontend lint/tests/build, restart-persistence tests, CI, a production dependency
 audit, Docker deployment, and honest limitations.”
 
 Finish on the dashboard with: “ProofLedger is not another finance chatbot. It is an evidence and

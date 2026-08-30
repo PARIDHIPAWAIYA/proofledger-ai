@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from proofledger import __version__
-from proofledger.api import router
+from proofledger.api import WorkspaceDependency, router
 from proofledger.config import get_settings
 
 settings = get_settings()
@@ -23,5 +23,11 @@ app.include_router(router)
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "version": __version__}
+def health(workspace: WorkspaceDependency) -> dict[str, str]:
+    repository = workspace.repository
+    return {
+        "status": "ok",
+        "version": __version__,
+        "storage": "database" if repository else "memory",
+        "database": "ok" if repository and repository.health() else "not_configured",
+    }

@@ -30,6 +30,7 @@ from proofledger.domain.models import (
     rupees_to_paise,
     stable_hash,
 )
+from proofledger.services.persistence import SQLAlchemyIngestionRepository
 
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024
 MAX_ROWS = 10_000
@@ -109,11 +110,30 @@ class ManifestSigner:
 class IngestionService:
     """Stage untrusted CSVs, normalize confirmed mappings, and sign the evidence manifest."""
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        repository: SQLAlchemyIngestionRepository | None = None,
+    ) -> None:
         self.staged: dict[str, StagedUpload] = {}
         self.manifests: dict[str, IngestionManifest] = {}
         self.records_by_manifest: dict[str, list[EvidenceRecord]] = {}
         self.signer = ManifestSigner()
+        self.repository = repository
+        if repository:
+            for manifest, records in repository.load_imports():
+                actual_hashes = {
+                    record.record_id: record.source_hash for record in records
+                }
+                if (
+                    not manifest.verify_signature()
+                    or actual_hashes != manifest.record_hashes
+                    or not all(record.verify_integrity() for record in records)
+                ):
+                    raise RuntimeError(
+                        f"persisted ingestion manifest {manifest.manifest_id} failed verification"
+                    )
+                self.manifests[manifest.manifest_id] = manifest
+                self.records_by_manifest[manifest.manifest_id] = records
 
     def preview(
         self,
@@ -245,6 +265,8 @@ class IngestionService:
         )
         if not manifest.verify_signature():
             raise RuntimeError("generated ingestion manifest failed signature verification")
+        if self.repository:
+            self.repository.save_import(manifest, records)
         self.manifests[manifest_id] = manifest
         self.records_by_manifest[manifest_id] = records
         return manifest, records
@@ -272,13 +294,17 @@ class IngestionService:
         actual_hashes = {record.record_id: record.source_hash for record in records}
         integrity = all(record.verify_integrity() for record in records)
         stage = self.staged.get(manifest.upload_id)
+        source_file_hash_bound = manifest.verify_manifest_hash()
+        if stage:
+            source_file_hash_bound = (
+                source_file_hash_bound
+                and stage.preview.file_sha256 == manifest.file_sha256
+            )
         checks = {
             "manifest_hash_matches": manifest.verify_manifest_hash(),
             "ed25519_signature_valid": manifest.verify_signature(),
             "record_hashes_match": actual_hashes == manifest.record_hashes and integrity,
-            "source_file_hash_bound": bool(
-                stage and stage.preview.file_sha256 == manifest.file_sha256
-            ),
+            "source_file_hash_bound": source_file_hash_bound,
         }
         failures = [name for name, passed in checks.items() if not passed]
         return IngestionVerification(valid=not failures, checks=checks, failures=failures)
