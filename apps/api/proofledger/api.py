@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from datetime import datetime
 from functools import lru_cache
 from typing import Annotated
 
 import networkx as nx
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from proofledger.config import Settings, get_settings
 from proofledger.domain.models import ControlStatus, SourceSystem
@@ -22,6 +23,17 @@ router = APIRouter(prefix="/api/v1")
 
 class TamperSimulationRequest(BaseModel):
     simulate_tamper: bool = False
+
+
+class ReviewResolutionRequest(BaseModel):
+    candidate_id: str | None = None
+    bank_reference: str = Field(min_length=4, max_length=80)
+    amount_paise: int | None = Field(default=None, ge=0)
+    occurred_at: datetime | None = None
+    external_id: str | None = Field(default=None, min_length=3, max_length=120)
+    evidence_sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    actor: str = Field(min_length=3, max_length=120)
+    rationale: str = Field(min_length=8, max_length=500)
 
 
 @lru_cache
@@ -55,7 +67,7 @@ def settlement_detail(
     return {
         "summary": workspace.settlement_summary(settlement),
         "settlement": settlement,
-        "evidence": settlement_evidence(settlement, workspace.dataset.records),
+        "evidence": settlement_evidence(settlement, workspace.effective_records),
         "controls": workspace.settlement_controls(settlement),
         "decision": decision,
         "journal_proposal": workspace.journal_for(settlement),
@@ -83,13 +95,52 @@ def reviews(workspace: WorkspaceDependency):
     decisions = {
         decision.decision_id: decision for decision in workspace.decisions
     }
-    return [
-        {
-            "question": question,
-            "decision": decisions[question.decision_id],
-        }
-        for question in workspace.questions
-    ]
+    payload = []
+    for question in workspace.questions:
+        decision = decisions[question.decision_id]
+        settlement = workspace.records_by_id.get(decision.left_record_ids[0])
+        payload.append(
+            {
+                "question": question,
+                "decision": decision,
+                "settlement": (
+                    workspace.settlement_summary(settlement)
+                    if settlement and settlement.settlement_id
+                    else None
+                ),
+                "expected_bank_reference": (
+                    settlement.bank_reference if settlement else None
+                ),
+            }
+        )
+    return payload
+
+
+@router.get("/reviews/history")
+def review_history(workspace: WorkspaceDependency):
+    return list(reversed(list(workspace.review_resolutions.values())))
+
+
+@router.post("/reviews/{question_id}/resolve")
+def resolve_review(
+    question_id: str,
+    request: ReviewResolutionRequest,
+    workspace: WorkspaceDependency,
+):
+    try:
+        return workspace.resolve_review(
+            question_id,
+            candidate_id=request.candidate_id,
+            bank_reference=request.bank_reference,
+            amount_paise=request.amount_paise,
+            occurred_at=request.occurred_at,
+            external_id=request.external_id,
+            evidence_sha256=request.evidence_sha256,
+            actor=request.actor,
+            rationale=request.rationale,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
 
 
 @router.get("/benchmark")
@@ -104,7 +155,7 @@ def evidence(
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
 ):
-    records = workspace.dataset.records
+    records = workspace.effective_records
     if source:
         records = [record for record in records if record.source == source]
     return {
@@ -164,7 +215,7 @@ def issue_certificate(
     try:
         certificate = SettlementCertificateService().issue(
             settlement,
-            workspace.dataset.records,
+            workspace.effective_records,
             workspace.controls,
         )
     except CloseBlockedError as error:
@@ -182,7 +233,7 @@ def verify_certificate(
     certificate = workspace.certificates.get(certificate_id)
     if not certificate:
         raise HTTPException(status_code=404, detail="certificate not found")
-    records = workspace.dataset.records
+    records = workspace.effective_records
     if request.simulate_tamper:
         target_id = next(iter(certificate.evidence_hashes))
         records = [

@@ -51,6 +51,8 @@ export type Candidate = {
 
 export type Decision = {
   decision_id: string;
+  left_record_ids: string[];
+  right_record_ids: string[];
   tier: string;
   status: string;
   confidence: number;
@@ -68,6 +70,42 @@ export type Review = {
     candidate_ids: string[];
   };
   decision: Decision;
+  settlement: SettlementSummary | null;
+  expected_bank_reference: string | null;
+};
+
+export type ReviewResolution = {
+  resolution_id: string;
+  question_id: string;
+  decision_id: string;
+  settlement_record_id: string;
+  candidate_record_id: string | null;
+  provided_bank_reference: string;
+  provided_amount_paise: number;
+  provided_occurred_at: string;
+  provided_external_id: string;
+  evidence_sha256: string;
+  original_candidate_hash: string | null;
+  actor: string;
+  rationale: string;
+  resolved_at: string;
+  resolution_hash: string;
+};
+
+export type ReviewResolutionOutcome = {
+  resolution: ReviewResolution;
+  audit_verified: boolean;
+  queue_before: number;
+  queue_after: number;
+  affected_settlements: Array<{
+    settlement_id: string;
+    before_status: string;
+    after_status: string;
+    before_decision: string;
+    after_decision: string;
+  }>;
+  settlement: SettlementSummary;
+  remaining_blockers: string[];
 };
 
 export type BenchmarkMetric = {

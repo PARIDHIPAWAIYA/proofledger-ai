@@ -72,6 +72,18 @@ Failure or absence of Gemini returns a deterministic explanation. Gemini never r
 - evidence hashing;
 - certificate issuance or verification.
 
+## Controller evidence overlays
+
+Review resolution is append-only. The controller submits a bank UTR, statement-row facts, an
+attachment SHA-256, actor, and rationale. ProofLedger stores a separately hashed resolution and
+builds a derived evidence view for reconciliation and controls. The original normalized record and
+its source hash remain unchanged.
+
+The derived view is never trusted merely because a human submitted it. Every reconciliation and
+finance control reruns. A missing bank row can become close-ready when the supplied amount and UTR
+pass; an existing ₹1 mismatch remains blocked, and the API rejects a duplicate row intended to hide
+that source discrepancy.
+
 ## Runtime
 
 The Buildathon demo uses an in-memory deterministic workspace so cloning the repository produces

@@ -23,6 +23,8 @@
 | Source record changed after ingestion | Frozen model and SHA-256 canonical hash | Append-only object storage and signed ingestion manifest |
 | LLM invents evidence | Only deterministic control JSON enters prompt; output advisory | Prompt/eval monitoring and data-loss prevention |
 | Semantic match silently approved | Domain invariant rejects semantic auto-approval | Maker-checker workflow and authorization policy |
+| Controller fabricates or rewrites review evidence | Original row stays immutable; action and attachment are separately hashed; all controls rerun | Signed file storage, authenticated actor, maker-checker approval, revocation |
+| Duplicate evidence masks an amount mismatch | API rejects new-row attachment when an exact linked bank row already exists | Source-system correction workflow and exception approval policy |
 | Duplicate journal | Deterministic posting signature control | Idempotency key against accounting connector |
 | Certificate replay | Certificate binds settlement ID, issue time, evidence hashes | Tenant ID, period ID, signature, expiry/revocation |
 | Cross-tenant evidence access | Not applicable in single-tenant demo | Row-level security and tenant-scoped keys |
@@ -33,6 +35,7 @@
 
 ## Known demo limitations
 
-The certificate is hashed, not cryptographically signed by an external key. The in-memory workspace
-has no authentication or tenant isolation. These are explicit non-production boundaries, not hidden
-claims.
+The certificate and controller actions are hashed, not cryptographically signed by an external
+key. The demo fingerprints a synthetic statement payload rather than storing an uploaded bank file.
+The in-memory workspace has no authentication or tenant isolation. These are explicit
+non-production boundaries, not hidden claims.

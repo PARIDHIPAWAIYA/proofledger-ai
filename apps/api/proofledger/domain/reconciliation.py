@@ -13,6 +13,7 @@ from proofledger.domain.models import (
     ObjectType,
     ReconciliationDecision,
     SourceSystem,
+    stable_hash,
 )
 
 
@@ -25,6 +26,10 @@ class ReconciliationEngine:
             *self._orders_to_payments(records),
             *self._settlements_to_bank(records),
         ]
+
+    @staticmethod
+    def _decision_id(left_record_id: str) -> str:
+        return f"dec_{stable_hash({'left_record_id': left_record_id})[:12]}"
 
     @staticmethod
     def _orders_to_payments(records: list[EvidenceRecord]) -> list[ReconciliationDecision]:
@@ -45,6 +50,7 @@ class ReconciliationEngine:
             if payment and payment.amount_paise == order.amount_paise:
                 decisions.append(
                     ReconciliationDecision(
+                        decision_id=ReconciliationEngine._decision_id(order.record_id),
                         left_record_ids=[order.record_id],
                         right_record_ids=[payment.record_id],
                         tier=MatchTier.EXACT,
@@ -56,6 +62,7 @@ class ReconciliationEngine:
             else:
                 decisions.append(
                     ReconciliationDecision(
+                        decision_id=ReconciliationEngine._decision_id(order.record_id),
                         left_record_ids=[order.record_id],
                         right_record_ids=[],
                         tier=MatchTier.UNMATCHED,
@@ -100,6 +107,7 @@ class ReconciliationEngine:
                 amount_equal = settlement.amount_paise == exact.amount_paise
                 decisions.append(
                     ReconciliationDecision(
+                        decision_id=self._decision_id(settlement.record_id),
                         left_record_ids=[settlement.record_id],
                         right_record_ids=[exact.record_id],
                         tier=MatchTier.EXACT,
@@ -135,6 +143,7 @@ class ReconciliationEngine:
             if not candidates:
                 decisions.append(
                     ReconciliationDecision(
+                        decision_id=self._decision_id(settlement.record_id),
                         left_record_ids=[settlement.record_id],
                         tier=MatchTier.UNMATCHED,
                         status=DecisionStatus.ABSTAINED,
@@ -181,6 +190,7 @@ class ReconciliationEngine:
 
             decisions.append(
                 ReconciliationDecision(
+                    decision_id=self._decision_id(settlement.record_id),
                     left_record_ids=[settlement.record_id],
                     right_record_ids=right_ids,
                     tier=tier,

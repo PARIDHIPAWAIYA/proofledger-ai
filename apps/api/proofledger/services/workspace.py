@@ -9,7 +9,10 @@ from proofledger.domain.models import (
     DecisionStatus,
     EvidenceRecord,
     ObjectType,
+    ReviewResolution,
     SettlementCertificate,
+    SourceSystem,
+    stable_hash,
 )
 from proofledger.domain.reconciliation import ReconciliationEngine
 from proofledger.domain.review import MinimumEvidenceReviewPlanner
@@ -31,24 +34,84 @@ class DemoWorkspace:
             order_count=order_count,
             settlement_size=settlement_size,
         )
-        self.records_by_id = {
+        self.source_records_by_id = {
             record.record_id: record for record in self.dataset.records
         }
         self.certificates: dict[str, SettlementCertificate] = {}
+        self.review_resolutions: dict[str, ReviewResolution] = {}
 
-    @cached_property
+    @property
+    def effective_records(self) -> list[EvidenceRecord]:
+        """Return a derived evidence view while preserving every original source row."""
+
+        resolutions_by_candidate = {
+            resolution.candidate_record_id: resolution
+            for resolution in self.review_resolutions.values()
+            if resolution.candidate_record_id
+        }
+        records: list[EvidenceRecord] = []
+        for record in self.dataset.records:
+            resolution = resolutions_by_candidate.get(record.record_id)
+            if not resolution:
+                records.append(record)
+                continue
+            settlement = self.source_records_by_id[resolution.settlement_record_id]
+            attributes = {
+                **record.attributes,
+                "evidence_overlay": "controller_bank_reference_attestation",
+                "original_source_hash": record.source_hash,
+                "review_resolution_id": resolution.resolution_id,
+                "attachment_sha256": resolution.evidence_sha256.lower(),
+            }
+            payload = record.model_dump(exclude={"source_hash"})
+            payload.update(
+                settlement_id=settlement.settlement_id,
+                bank_reference=resolution.provided_bank_reference,
+                attributes=attributes,
+            )
+            records.append(EvidenceRecord.model_validate(payload))
+        for resolution in self.review_resolutions.values():
+            if resolution.candidate_record_id:
+                continue
+            settlement = self.source_records_by_id[resolution.settlement_record_id]
+            records.append(
+                EvidenceRecord(
+                    record_id=f"review_bank_{resolution.resolution_id}",
+                    source=SourceSystem.BANK,
+                    object_type=ObjectType.BANK_CREDIT,
+                    occurred_at=resolution.provided_occurred_at,
+                    amount_paise=resolution.provided_amount_paise,
+                    external_id=resolution.provided_external_id,
+                    settlement_id=settlement.settlement_id,
+                    bank_reference=resolution.provided_bank_reference,
+                    narration="CONTROLLER-VERIFIED BANK STATEMENT EVIDENCE",
+                    status="credited",
+                    attributes={
+                        "evidence_overlay": "controller_bank_statement_attachment",
+                        "review_resolution_id": resolution.resolution_id,
+                        "attachment_sha256": resolution.evidence_sha256.lower(),
+                    },
+                )
+            )
+        return records
+
+    @property
+    def records_by_id(self) -> dict[str, EvidenceRecord]:
+        return {record.record_id: record for record in self.effective_records}
+
+    @property
     def graph(self) -> FinancialLifecycleGraph:
-        return FinancialLifecycleGraph.from_records(self.dataset.records)
+        return FinancialLifecycleGraph.from_records(self.effective_records)
 
-    @cached_property
+    @property
     def controls(self):
-        return FinanceControlEngine().evaluate(self.dataset.records)
+        return FinanceControlEngine().evaluate(self.effective_records)
 
-    @cached_property
+    @property
     def decisions(self):
-        return ReconciliationEngine().reconcile(self.dataset.records)
+        return ReconciliationEngine().reconcile(self.effective_records)
 
-    @cached_property
+    @property
     def questions(self):
         return MinimumEvidenceReviewPlanner().questions(self.decisions)
 
@@ -57,14 +120,14 @@ class DemoWorkspace:
         return ReconciliationBenchmark().evaluate(
             self.dataset.records,
             self.dataset.true_links,
-            self.decisions,
+            ReconciliationEngine().reconcile(self.dataset.records),
         )
 
     @property
     def settlements(self) -> list[EvidenceRecord]:
         return [
             record
-            for record in self.dataset.records
+            for record in self.effective_records
             if record.object_type == ObjectType.SETTLEMENT
         ]
 
@@ -167,5 +230,140 @@ class DemoWorkspace:
     def journal_for(self, settlement: EvidenceRecord):
         return JournalProposalService().propose(
             settlement,
-            self.dataset.records,
+            self.effective_records,
         )
+
+    def resolve_review(
+        self,
+        question_id: str,
+        *,
+        candidate_id: str | None,
+        bank_reference: str,
+        amount_paise: int | None,
+        occurred_at,
+        external_id: str | None,
+        evidence_sha256: str,
+        actor: str,
+        rationale: str,
+    ) -> dict:
+        """Attach controller evidence, then recompute every authoritative output."""
+
+        if question_id in self.review_resolutions:
+            raise ValueError("review question is already resolved")
+        question = next(
+            (item for item in self.questions if item.question_id == question_id),
+            None,
+        )
+        if not question:
+            raise ValueError("review question is stale or not found")
+        decision = next(
+            (item for item in self.decisions if item.decision_id == question.decision_id),
+            None,
+        )
+        if not decision:
+            raise ValueError("reconciliation decision is no longer available")
+        settlement = self.source_records_by_id[decision.left_record_ids[0]]
+        if settlement.object_type != ObjectType.SETTLEMENT:
+            raise ValueError("review question does not belong to a settlement")
+        candidate = None
+        if candidate_id:
+            allowed_candidates = {item.candidate_id for item in decision.candidates}
+            if candidate_id not in allowed_candidates:
+                raise ValueError("candidate is not part of this review question")
+            candidate = self.source_records_by_id.get(candidate_id)
+            if not candidate or candidate.object_type != ObjectType.BANK_CREDIT:
+                raise ValueError("candidate bank evidence was not found")
+            if any(
+                item.candidate_record_id == candidate_id
+                for item in self.review_resolutions.values()
+            ):
+                raise ValueError("candidate bank evidence is already linked")
+            amount_paise = candidate.amount_paise
+            occurred_at = candidate.occurred_at
+            external_id = candidate.external_id
+        else:
+            if decision.right_record_ids:
+                raise ValueError(
+                    "an exact bank row already exists; correct its source amount "
+                    "instead of attaching a duplicate"
+                )
+            if amount_paise is None or occurred_at is None or not external_id:
+                raise ValueError(
+                    "a new statement row requires amount, timestamp, and external ID"
+                )
+            if external_id in {
+                record.external_id for record in self.effective_records
+            }:
+                raise ValueError("bank statement external ID already exists")
+        normalized_reference = bank_reference.strip().upper()
+        if normalized_reference != (settlement.bank_reference or "").upper():
+            raise ValueError("provided UTR does not match the settlement payout reference")
+
+        before_questions = len(self.questions)
+        before_summaries = {
+            item.settlement_id: self.settlement_summary(item)
+            for item in self.settlements
+        }
+        resolution = ReviewResolution(
+            resolution_id=(
+                "res_"
+                + stable_hash(
+                    {
+                        "question_id": question_id,
+                        "candidate_id": candidate_id,
+                        "amount_paise": amount_paise,
+                        "occurred_at": str(occurred_at),
+                        "external_id": external_id,
+                        "evidence_sha256": evidence_sha256.lower(),
+                    }
+                )[:12]
+            ),
+            question_id=question_id,
+            decision_id=decision.decision_id,
+            settlement_record_id=settlement.record_id,
+            candidate_record_id=candidate.record_id if candidate else None,
+            provided_bank_reference=normalized_reference,
+            provided_amount_paise=amount_paise,
+            provided_occurred_at=occurred_at,
+            provided_external_id=external_id,
+            evidence_sha256=evidence_sha256.lower(),
+            original_candidate_hash=candidate.source_hash if candidate else None,
+            actor=actor.strip(),
+            rationale=rationale.strip(),
+        )
+        self.review_resolutions[question_id] = resolution
+
+        after_summaries = {
+            item.settlement_id: self.settlement_summary(item)
+            for item in self.settlements
+        }
+        affected = [
+            {
+                "settlement_id": settlement_id,
+                "before_status": before_summaries[settlement_id]["status"],
+                "after_status": summary["status"],
+                "before_decision": before_summaries[settlement_id][
+                    "decision_status"
+                ],
+                "after_decision": summary["decision_status"],
+            }
+            for settlement_id, summary in after_summaries.items()
+            if summary != before_summaries[settlement_id]
+        ]
+        current_settlement = self.settlement(settlement.settlement_id or "")
+        if not current_settlement:
+            raise RuntimeError("resolved settlement disappeared from the workspace")
+        remaining_blockers = [
+            control.control_id
+            for control in self.settlement_controls(current_settlement)
+            if control.status == ControlStatus.FAIL
+        ]
+        return {
+            "resolution": resolution,
+            "audit_verified": resolution.verify_integrity(),
+            "queue_before": before_questions,
+            "queue_after": len(self.questions),
+            "affected_settlements": affected,
+            "settlement": self.settlement_summary(current_settlement),
+            "remaining_blockers": remaining_blockers,
+        }

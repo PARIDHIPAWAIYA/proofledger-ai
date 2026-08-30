@@ -188,6 +188,45 @@ class ReviewQuestion(BaseModel):
     candidate_ids: list[str] = Field(default_factory=list)
 
 
+class ReviewResolution(BaseModel):
+    """Immutable controller attestation that enriches, but never mutates, source evidence."""
+
+    model_config = ConfigDict(frozen=True)
+
+    resolution_id: str = Field(default_factory=lambda: f"res_{uuid4().hex[:12]}")
+    question_id: str
+    decision_id: str
+    settlement_record_id: str
+    candidate_record_id: str | None = None
+    provided_bank_reference: str = Field(min_length=4, max_length=80)
+    provided_amount_paise: int = Field(ge=0)
+    provided_occurred_at: datetime
+    provided_external_id: str = Field(min_length=3, max_length=120)
+    evidence_sha256: str = Field(pattern=r"^[a-fA-F0-9]{64}$")
+    original_candidate_hash: str | None = Field(
+        default=None,
+        pattern=r"^[a-f0-9]{64}$",
+    )
+    actor: str = Field(min_length=3, max_length=120)
+    rationale: str = Field(min_length=8, max_length=500)
+    resolved_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    resolution_hash: str = ""
+
+    @model_validator(mode="after")
+    def populate_and_validate_hash(self) -> ReviewResolution:
+        payload = self.model_dump(exclude={"resolution_hash"}, mode="json")
+        expected = stable_hash(payload)
+        if self.resolution_hash and self.resolution_hash != expected:
+            raise ValueError("resolution_hash does not match the controller action")
+        if not self.resolution_hash:
+            object.__setattr__(self, "resolution_hash", expected)
+        return self
+
+    def verify_integrity(self) -> bool:
+        payload = self.model_dump(exclude={"resolution_hash"}, mode="json")
+        return self.resolution_hash == stable_hash(payload)
+
+
 class JournalLine(BaseModel):
     account_code: str
     account_name: str

@@ -20,3 +20,9 @@ and events instead of forcing all activity into one table or case identifier.
 The submission uses synthetic records inspired by public Razorpay entity shapes because no test
 credentials are available. The product must not imply that simulated records came from Razorpay.
 
+## ADR-005: Append-only review evidence
+
+Controller actions never mutate the normalized source record. A separately hashed resolution
+creates a derived evidence overlay, after which reconciliation, controls, graph construction, and
+certificate eligibility are recomputed. Review authority can add evidence but cannot bypass a
+failed accounting equation.

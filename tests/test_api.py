@@ -66,3 +66,44 @@ def test_certificate_issue_block_and_tamper_simulation() -> None:
     assert valid.json()["valid"] is True
     assert tampered.json()["valid"] is False
     assert "evidence_hashes_match" in tampered.json()["failures"]
+
+
+def test_review_resolution_endpoint_records_audit_and_updates_detail() -> None:
+    workspace = DemoWorkspace(seed=11, order_count=120, settlement_size=20)
+    settlement = workspace.settlement("setl_demo_0001")
+    assert settlement is not None
+    app.dependency_overrides[get_workspace] = lambda: workspace
+    isolated_client = TestClient(app)
+    try:
+        reviews = isolated_client.get("/api/v1/reviews").json()
+        review = next(
+            item
+            for item in reviews
+            if item["settlement"]["settlement_id"] == "setl_demo_0001"
+        )
+        response = isolated_client.post(
+            f"/api/v1/reviews/{review['question']['question_id']}/resolve",
+            json={
+                "candidate_id": None,
+                "bank_reference": settlement.bank_reference,
+                "amount_paise": settlement.amount_paise,
+                "occurred_at": settlement.occurred_at.isoformat(),
+                "external_id": "api_uploaded_bank_line_0001",
+                "evidence_sha256": "c" * 64,
+                "actor": "controller@demo",
+                "rationale": "Verified against the API test bank statement.",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["audit_verified"] is True
+        assert response.json()["settlement"]["status"] == "ready"
+        history = isolated_client.get("/api/v1/reviews/history").json()
+        assert len(history) == 1
+        assert history[0]["evidence_sha256"] == "c" * 64
+        detail = isolated_client.get(
+            "/api/v1/settlements/setl_demo_0001"
+        ).json()
+        assert detail["summary"]["status"] == "ready"
+    finally:
+        app.dependency_overrides[get_workspace] = _small_workspace

@@ -6,6 +6,7 @@ from proofledger.domain.models import (
     DecisionStatus,
     ReconciliationDecision,
     ReviewQuestion,
+    stable_hash,
 )
 
 
@@ -49,7 +50,14 @@ class MinimumEvidenceReviewPlanner:
             )
             evidence_requested = "bank statement date range"
 
+        question_fingerprint = stable_hash(
+            {
+                "decision_id": decision.decision_id,
+                "evidence_requested": evidence_requested,
+            }
+        )
         return ReviewQuestion(
+            question_id=f"q_{question_fingerprint[:12]}",
             decision_id=decision.decision_id,
             prompt=prompt,
             evidence_requested=evidence_requested,

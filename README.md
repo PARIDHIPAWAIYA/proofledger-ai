@@ -17,11 +17,13 @@ Generic reconciliation tools flatten rows and return a match score. ProofLedger 
 2. Applies exact and composite evidence before any probabilistic assistance.
 3. Abstains when candidate evidence is unsafe or ambiguous.
 4. Asks the smallest question likely to resolve that uncertainty.
-5. Enforces ten deterministic accounting and lifecycle controls.
-6. Proposes a balanced journal that remains pending human approval.
-7. Issues a proof-carrying settlement certificate only when critical controls pass.
-8. Detects if any certified source evidence changes—even by ₹1.
-9. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
+5. Hashes controller evidence separately, preserves the original source row, and recomputes.
+6. Rejects review actions that try to mask an already-linked amount mismatch.
+7. Enforces ten deterministic accounting and lifecycle controls.
+8. Proposes a balanced journal that remains pending human approval.
+9. Issues a proof-carrying settlement certificate only when critical controls pass.
+10. Detects if any certified source evidence changes—even by ₹1.
+11. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
 
 ## Demo result
 
@@ -44,7 +46,7 @@ The committed benchmark exposes its labels, methods, and caveats for inspection.
 
 - **Close command:** captured volume, close readiness, exception runway, and proof graph counts.
 - **Settlement book:** payout-by-payout evidence, controls, and balanced journal proposals.
-- **Evidence review:** questions ranked by expected information gain.
+- **Evidence review:** attach the missing bank row, verify its UTR, and watch the close recompute.
 - **Lifecycle graph:** interactive order → payment → settlement → bank → ledger traversal.
 - **Safety benchmark:** exact, fuzzy, and ProofLedger outcomes side by side.
 - **Certificate lab:** issue a valid close certificate, change one source by ₹1, and watch
@@ -152,6 +154,8 @@ npm run build
 | GET /api/v1/settlements | Settlement control book |
 | GET /api/v1/settlements/{id} | Evidence, controls, decision, and journal |
 | GET /api/v1/reviews | Minimum-evidence review queue |
+| GET /api/v1/reviews/history | Append-only controller resolution trail |
+| POST /api/v1/reviews/{id}/resolve | Attach hashed evidence and recompute the close |
 | GET /api/v1/benchmark | Held-out baseline comparison |
 | GET /api/v1/graph/{id} | Lifecycle graph for one settlement |
 | POST /api/v1/settlements/{id}/certificate | Issue certificate or return a blocking control |

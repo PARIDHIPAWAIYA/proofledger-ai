@@ -32,16 +32,23 @@ Key sentence: “Gemini did not decide this. Integer-paise accounting did.”
 
 Try issuing a certificate. The API returns a conflict naming the blocking control.
 
-## 2:15–3:05 — Safe abstention and human review
+## 2:15–3:25 — Safe abstention and evidence-bound review
 
 Open **Evidence review**.
 
-Show ranked candidates, amount/date evidence, expected information gain, and the requested UTR.
+Open the missing-bank question. Show the low-confidence candidate, then keep **Attach new statement
+row** selected. Submit the verified UTR.
 
-Key sentence: “When evidence is ambiguous, the product does not hallucinate certainty. It asks
-for the smallest missing proof.”
+Point out the signed-looking audit fingerprint, queue reduction, and settlement transition from
+blocked to ready. Explain that the original source data was not rewritten; reconciliation and all
+controls reran over an evidence overlay.
 
-## 3:05–4:10 — Balanced journal and proof certificate
+Then show settlement 0002's locked review card: an exact row exists with a ₹1 difference, so the
+API refuses a duplicate evidence row and requires source correction.
+
+Key sentence: “A human can add a missing fact, but cannot vote a broken equation into passing.”
+
+## 3:25–4:20 — Balanced journal and proof certificate
 
 Return to settlement 0000.
 
@@ -54,7 +61,7 @@ Then click **Change ₹1**. Verification must fail on evidence_hashes_match.
 
 Key sentence: “The certificate carries the claim and the evidence hashes needed to challenge it.”
 
-## 4:10–5:05 — Honest benchmark
+## 4:20–5:10 — Honest benchmark
 
 Open **Safety benchmark**.
 
@@ -66,10 +73,10 @@ Explain:
 
 State clearly that results are synthetic.
 
-## 5:05–6:00 — AI boundary and job signal
+## 5:10–6:00 — AI boundary and job signal
 
 “AI only explains deterministic exceptions and phrases evidence questions. It cannot approve
-matches, journals, or financial close. The repository includes domain invariants, 18 backend/API
+matches, journals, or financial close. The repository includes domain invariants, 23 backend/API
 tests, frontend lint/tests/build, CI, a production dependency audit, Docker deployment, and honest
 limitations.”
 
