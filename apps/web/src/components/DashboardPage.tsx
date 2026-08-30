@@ -105,6 +105,17 @@ function DashboardPage({
         />
       </section>
 
+      {overview.active_imports > 0 && (
+        <button className="active-import-banner" onClick={() => onNavigate("intake")}>
+          <DatabaseZap size={18} />
+          <span>
+            <strong>{overview.imported_records} signed source record{overview.imported_records === 1 ? "" : "s"} active</strong>
+            <small>{overview.active_imports} verified manifest{overview.active_imports === 1 ? "" : "s"} now participates in every graph, control, review, and certificate.</small>
+          </span>
+          <ArrowRight size={16} />
+        </button>
+      )}
+
       <section className="dashboard-grid">
         <article className="panel settlement-runway">
           <div className="panel-heading">

@@ -17,16 +17,18 @@ Generic reconciliation tools flatten rows and return a match score. ProofLedger 
 2. Stages real CSV exports behind size, encoding, shape, and row-validation boundaries.
 3. Suggests schema mappings from headers only, then requires controller confirmation.
 4. Atomically normalizes accepted rows and seals them in an Ed25519-signed manifest.
-5. Applies exact and composite evidence before any probabilistic assistance.
-6. Abstains when candidate evidence is unsafe or ambiguous.
-7. Asks the smallest question likely to resolve that uncertainty.
-8. Hashes controller evidence separately, preserves the original source row, and recomputes.
-9. Rejects review actions that try to mask an already-linked amount mismatch.
-10. Enforces ten deterministic accounting and lifecycle controls.
-11. Proposes a balanced journal that remains pending human approval.
-12. Issues a proof-carrying settlement certificate only when critical controls pass.
-13. Detects if any imported or certified evidence changes—even by ₹1.
-14. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
+5. Separates signing from authority through a hashed controller activation event.
+6. Recomputes graphs, matches, controls, reviews, journals, and certificates after activation.
+7. Rejects duplicate bank rows that attempt to mask a known source mismatch.
+8. Applies exact and composite evidence before any probabilistic assistance.
+9. Abstains when candidate evidence is unsafe or ambiguous.
+10. Asks the smallest question likely to resolve that uncertainty.
+11. Hashes controller evidence separately, preserves the original source row, and recomputes.
+12. Enforces ten deterministic accounting and lifecycle controls.
+13. Proposes a balanced journal that remains pending human approval.
+14. Issues a proof-carrying settlement certificate only when critical controls pass.
+15. Detects if any imported or certified evidence changes—even by ₹1.
+16. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
 
 ## Demo result
 
@@ -49,7 +51,7 @@ The committed benchmark exposes its labels, methods, and caveats for inspection.
 
 - **Close command:** captured volume, close readiness, exception runway, and proof graph counts.
 - **Evidence intake:** real CSV preview, deterministic/AI-assisted header mapping, atomic import,
-  signed manifest export, and ₹1 tamper lab.
+  signed manifest export, ₹1 tamper lab, audited activation, and live close recomputation.
 - **Settlement book:** payout-by-payout evidence, controls, and balanced journal proposals.
 - **Evidence review:** attach the missing bank row, verify its UTR, and watch the close recompute.
 - **Lifecycle graph:** interactive order → payment → settlement → bank → ledger traversal.
@@ -78,13 +80,14 @@ fallback.
 Five source systems
   └─> bounded CSV staging + controller-confirmed mapping
        └─> Ed25519 manifest + immutable, SHA-256-hashed evidence records
-       └─> object-centric lifecycle graph
-            ├─> exact / composite reconciliation
-            ├─> calibrated candidate sets + safe abstention
-            ├─> ten deterministic finance controls
-            └─> minimum-evidence controller review
-                   ├─> balanced journal proposal
-                   └─> verifiable settlement certificate
+            └─> verified + controller-activated authority
+                 └─> object-centric lifecycle graph
+                      ├─> exact / composite reconciliation
+                      ├─> calibrated candidate sets + safe abstention
+                      ├─> ten deterministic finance controls
+                      └─> minimum-evidence controller review
+                           ├─> balanced journal proposal
+                           └─> verifiable settlement certificate
 ~~~
 
 Authoritative money calculations use integer paise. Probabilistic output never enters an
@@ -169,7 +172,11 @@ npm run build
 | POST /api/v1/ingestion/{upload_id}/ai-map | Header-only bounded mapping suggestion |
 | POST /api/v1/ingestion/commit | Atomically normalize records and sign the manifest |
 | GET /api/v1/ingestion/manifests | List committed import manifests |
+| GET /api/v1/ingestion/activations | List append-only activation/deactivation events |
+| GET /api/v1/ingestion/demo-bank-statement | Generate evidence for the live missing-bank scenario |
 | POST /api/v1/ingestion/manifests/{id}/verify | Verify signature/records or simulate tampering |
+| POST /api/v1/ingestion/manifests/{id}/activate | Verify, audit, activate, and recompute the workspace |
+| POST /api/v1/ingestion/manifests/{id}/deactivate | Audit removal and recompute downstream results |
 | GET /api/v1/benchmark | Held-out baseline comparison |
 | GET /api/v1/graph/{id} | Lifecycle graph for one settlement |
 | POST /api/v1/settlements/{id}/certificate | Issue certificate or return a blocking control |
@@ -187,10 +194,11 @@ npm run build
 ## Honest scope
 
 The built-in close scenario uses deterministic synthetic data inspired by public payment entity
-shapes; the evidence-intake lab also accepts local CSV exports. Imported files remain in process
-memory and are not yet connected to the demo dashboard dataset. This project does not claim access
-to Razorpay production data, move money, execute refunds, post a real journal, or provide tax/legal
-advice. Real deployment requires durable encrypted storage, tenant authentication, key management,
+shapes; the evidence-intake lab also accepts local CSV exports. Activated imports participate in
+the same graph, reconciliation, controls, review queue, journal proposals, and certificates as the
+built-in evidence. State remains in process memory. This project does not claim access to Razorpay
+production data, move money, execute refunds, post a real journal, or provide tax/legal advice.
+Real deployment requires durable encrypted storage, tenant authentication, key management,
 retention controls, maker-checker approval, observability, and merchant-specific validation.
 
 See docs/limitations.md and docs/threat-model.md before treating this as production software.

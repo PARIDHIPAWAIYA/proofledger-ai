@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from functools import cached_property
 
 from proofledger.domain.controls import FinanceControlEngine
 from proofledger.domain.graph import FinancialLifecycleGraph
+from proofledger.domain.ingestion import ActivationAction, IngestionActivation
 from proofledger.domain.models import (
     ControlStatus,
     DecisionStatus,
@@ -18,7 +20,7 @@ from proofledger.domain.reconciliation import ReconciliationEngine
 from proofledger.domain.review import MinimumEvidenceReviewPlanner
 from proofledger.services.benchmark import ReconciliationBenchmark
 from proofledger.services.closing import JournalProposalService
-from proofledger.services.ingestion import IngestionService
+from proofledger.services.ingestion import IngestionError, IngestionService
 from proofledger.services.synthetic import DatasetBundle, SyntheticFinanceGenerator
 
 
@@ -35,12 +37,27 @@ class DemoWorkspace:
             order_count=order_count,
             settlement_size=settlement_size,
         )
-        self.source_records_by_id = {
-            record.record_id: record for record in self.dataset.records
-        }
         self.certificates: dict[str, SettlementCertificate] = {}
         self.review_resolutions: dict[str, ReviewResolution] = {}
         self.ingestion = IngestionService()
+        self.active_manifest_ids: set[str] = set()
+        self.ingestion_activations: list[IngestionActivation] = []
+
+    @property
+    def active_import_records(self) -> list[EvidenceRecord]:
+        return [
+            record
+            for manifest_id in sorted(self.active_manifest_ids)
+            for record in self.ingestion.records_by_manifest.get(manifest_id, [])
+        ]
+
+    @property
+    def source_records(self) -> list[EvidenceRecord]:
+        return [*self.dataset.records, *self.active_import_records]
+
+    @property
+    def source_records_by_id(self) -> dict[str, EvidenceRecord]:
+        return {record.record_id: record for record in self.source_records}
 
     @property
     def effective_records(self) -> list[EvidenceRecord]:
@@ -52,7 +69,7 @@ class DemoWorkspace:
             if resolution.candidate_record_id
         }
         records: list[EvidenceRecord] = []
-        for record in self.dataset.records:
+        for record in self.source_records:
             resolution = resolutions_by_candidate.get(record.record_id)
             if not resolution:
                 records.append(record)
@@ -187,16 +204,18 @@ class DemoWorkspace:
     def overview(self) -> dict:
         payments = [
             record
-            for record in self.dataset.records
+            for record in self.effective_records
             if record.object_type == ObjectType.PAYMENT
         ]
         failed = [
             result for result in self.controls if result.status == ControlStatus.FAIL
         ]
+        records_by_id = self.records_by_id
         settlement_decisions = [
             decision
             for decision in self.decisions
-            if decision.left_record_ids[0].startswith("razorpay_settlement_")
+            if records_by_id[decision.left_record_ids[0]].object_type
+            == ObjectType.SETTLEMENT
         ]
         automated = sum(
             decision.status == DecisionStatus.AUTO_APPROVED
@@ -205,7 +224,9 @@ class DemoWorkspace:
         graph_summary = self.graph.summary()
         return {
             "dataset_id": self.dataset.dataset_id,
-            "evidence_records": len(self.dataset.records),
+            "evidence_records": len(self.effective_records),
+            "active_imports": len(self.active_manifest_ids),
+            "imported_records": len(self.active_import_records),
             "captured_paise": sum(record.amount_paise for record in payments),
             "settled_paise": sum(record.amount_paise for record in self.settlements),
             "settlement_count": len(self.settlements),
@@ -234,6 +255,225 @@ class DemoWorkspace:
             settlement,
             self.effective_records,
         )
+
+    def demo_bank_statement(self) -> dict[str, str]:
+        decision = next(
+            (
+                item
+                for item in self.decisions
+                if not item.right_record_ids
+                and self.records_by_id[item.left_record_ids[0]].object_type
+                == ObjectType.SETTLEMENT
+            ),
+            None,
+        )
+        if not decision:
+            raise IngestionError("no missing bank-evidence scenario remains in this workspace")
+        settlement = self.records_by_id[decision.left_record_ids[0]]
+        amount = f"{settlement.amount_paise // 100}.{settlement.amount_paise % 100:02d}"
+        value_date = (settlement.occurred_at + timedelta(days=1)).date().isoformat()
+        external_id = f"judge_bank_{settlement.settlement_id}"
+        content = (
+            "Transaction ID,Value Date,Credit Amount,UTR,Settlement ID,Description\r\n"
+            f"{external_id},{value_date},{amount},{settlement.bank_reference},"
+            f"{settlement.settlement_id},Controller-verified settlement credit\r\n"
+        )
+        return {
+            "filename": "judge-ready-missing-bank-evidence.csv",
+            "content": content,
+            "settlement_id": settlement.settlement_id or "",
+            "expected_transition": "blocked_to_ready",
+        }
+
+    def activate_manifest(
+        self,
+        manifest_id: str,
+        *,
+        actor: str,
+        rationale: str,
+    ) -> dict:
+        manifest = self.ingestion.manifests.get(manifest_id)
+        if not manifest:
+            raise IngestionError("ingestion manifest not found")
+        if manifest_id in self.active_manifest_ids:
+            raise IngestionError("ingestion manifest is already active")
+        verification = self.ingestion.verify(manifest_id)
+        if not verification.valid:
+            raise IngestionError(
+                "ingestion manifest failed verification and cannot be activated",
+                verification.failures,
+            )
+        imported = self.ingestion.records_by_manifest[manifest_id]
+        current = self.effective_records
+        current_ids = {record.record_id for record in current}
+        collisions = sorted(
+            record.record_id
+            for record in imported
+            if record.record_id in current_ids
+        )
+        if collisions:
+            raise IngestionError("record ID collision", collisions[:10])
+        current_identities = {
+            (record.source, record.object_type, record.external_id) for record in current
+        }
+        identity_collisions = sorted(
+            record.external_id
+            for record in imported
+            if (record.source, record.object_type, record.external_id) in current_identities
+        )
+        if identity_collisions:
+            raise IngestionError(
+                "source records already exist for these external IDs",
+                identity_collisions[:10],
+            )
+        self._reject_duplicate_bank_masking(imported, current)
+
+        before = self._activation_snapshot()
+        self.active_manifest_ids.add(manifest_id)
+        after = self._activation_snapshot()
+        event = self._activation_event(
+            manifest_id,
+            ActivationAction.ACTIVATE,
+            actor,
+            rationale,
+        )
+        self.ingestion_activations.append(event)
+        return self._activation_outcome(event, before, after)
+
+    def deactivate_manifest(
+        self,
+        manifest_id: str,
+        *,
+        actor: str,
+        rationale: str,
+    ) -> dict:
+        if manifest_id not in self.active_manifest_ids:
+            raise IngestionError("ingestion manifest is not active")
+        imported_ids = {
+            record.record_id
+            for record in self.ingestion.records_by_manifest[manifest_id]
+        }
+        referenced = [
+            resolution.resolution_id
+            for resolution in self.review_resolutions.values()
+            if resolution.settlement_record_id in imported_ids
+            or resolution.candidate_record_id in imported_ids
+        ]
+        if referenced:
+            raise IngestionError(
+                "cannot deactivate evidence referenced by controller resolutions",
+                referenced,
+            )
+
+        before = self._activation_snapshot()
+        self.active_manifest_ids.remove(manifest_id)
+        after = self._activation_snapshot()
+        event = self._activation_event(
+            manifest_id,
+            ActivationAction.DEACTIVATE,
+            actor,
+            rationale,
+        )
+        self.ingestion_activations.append(event)
+        return self._activation_outcome(event, before, after)
+
+    @staticmethod
+    def _reject_duplicate_bank_masking(
+        imported: list[EvidenceRecord],
+        current: list[EvidenceRecord],
+    ) -> None:
+        banks = [
+            record for record in current if record.object_type == ObjectType.BANK_CREDIT
+        ]
+        conflicts = []
+        for record in imported:
+            if record.object_type != ObjectType.BANK_CREDIT:
+                continue
+            if any(
+                (
+                    record.settlement_id
+                    and bank.settlement_id == record.settlement_id
+                )
+                or (
+                    record.bank_reference
+                    and bank.bank_reference
+                    and bank.bank_reference.upper() == record.bank_reference.upper()
+                )
+                for bank in banks
+            ):
+                conflicts.append(record.external_id)
+        if conflicts:
+            raise IngestionError(
+                "bank evidence already exists for the linked settlement; correct the source "
+                "instead of masking it with a second row",
+                sorted(conflicts)[:10],
+            )
+
+    def _activation_snapshot(self) -> dict:
+        summaries = {
+            settlement.settlement_id: self.settlement_summary(settlement)
+            for settlement in self.settlements
+        }
+        overview = self.overview()
+        return {
+            "evidence_records": overview["evidence_records"],
+            "active_imports": overview["active_imports"],
+            "imported_records": overview["imported_records"],
+            "failed_controls": overview["failed_controls"],
+            "review_queue": overview["review_queue"],
+            "ready_settlements": sum(
+                summary["status"] == "ready" for summary in summaries.values()
+            ),
+            "settlements": summaries,
+        }
+
+    def _activation_event(
+        self,
+        manifest_id: str,
+        action: ActivationAction,
+        actor: str,
+        rationale: str,
+    ) -> IngestionActivation:
+        manifest = self.ingestion.manifests[manifest_id]
+        records = self.ingestion.records_by_manifest[manifest_id]
+        return IngestionActivation(
+            manifest_id=manifest_id,
+            manifest_hash=manifest.manifest_hash,
+            action=action,
+            actor=actor.strip(),
+            rationale=rationale.strip(),
+            record_count=len(records),
+            affected_settlement_ids=sorted(
+                {record.settlement_id for record in records if record.settlement_id}
+            ),
+        )
+
+    @staticmethod
+    def _activation_outcome(
+        event: IngestionActivation,
+        before: dict,
+        after: dict,
+    ) -> dict:
+        before_settlements = before.pop("settlements")
+        after_settlements = after.pop("settlements")
+        settlement_ids = sorted(set(before_settlements) | set(after_settlements))
+        affected = [
+            {
+                "settlement_id": settlement_id,
+                "before": before_settlements.get(settlement_id),
+                "after": after_settlements.get(settlement_id),
+            }
+            for settlement_id in settlement_ids
+            if before_settlements.get(settlement_id)
+            != after_settlements.get(settlement_id)
+        ]
+        return {
+            "activation": event,
+            "audit_verified": event.verify_integrity(),
+            "before": before,
+            "after": after,
+            "affected_settlements": affected,
+        }
 
     def resolve_review(
         self,

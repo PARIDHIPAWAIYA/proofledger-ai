@@ -1,6 +1,8 @@
 export type Overview = {
   dataset_id: string;
   evidence_records: number;
+  active_imports: number;
+  imported_records: number;
   captured_paise: number;
   settled_paise: number;
   settlement_count: number;
@@ -232,4 +234,45 @@ export type AIMappingResponse = {
   mapping: Record<string, string | null>;
   generated_by: string;
   warning: string;
+};
+
+export type DemoBankStatement = {
+  filename: string;
+  content: string;
+  settlement_id: string;
+  expected_transition: "blocked_to_ready";
+};
+
+export type IngestionActivation = {
+  activation_id: string;
+  manifest_id: string;
+  manifest_hash: string;
+  action: "activate" | "deactivate";
+  actor: string;
+  rationale: string;
+  record_count: number;
+  affected_settlement_ids: string[];
+  created_at: string;
+  activation_hash: string;
+};
+
+export type ActivationSnapshot = {
+  evidence_records: number;
+  active_imports: number;
+  imported_records: number;
+  failed_controls: number;
+  review_queue: number;
+  ready_settlements: number;
+};
+
+export type ActivationOutcome = {
+  activation: IngestionActivation;
+  audit_verified: boolean;
+  before: ActivationSnapshot;
+  after: ActivationSnapshot;
+  affected_settlements: Array<{
+    settlement_id: string;
+    before: SettlementSummary | null;
+    after: SettlementSummary | null;
+  }>;
 };

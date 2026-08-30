@@ -23,6 +23,9 @@
 | Source record changed after ingestion | Frozen model, canonical SHA-256, record-hash manifest, Ed25519 verification | Append-only object storage and KMS/HSM-backed tenant signing key |
 | Source file replaced or mapping rewritten | Manifest binds file SHA-256, mapping, public key, timestamp, and record hashes | Retain encrypted original with tenant/period metadata and key rotation |
 | Partial import leaves an inconsistent ledger | All rows validate before any record or manifest is committed | Durable database transaction and idempotency key |
+| Signed data becomes authoritative without approval | Commit and activation are separate; activation re-verifies and records actor/rationale in a hashed event | Authenticated maker-checker policy and scoped roles |
+| Second bank row hides a known mismatch | Activation rejects bank evidence when a row already exists for the settlement/reference | Source correction and governed exception workflow |
+| Activation removal silently changes prior conclusions | Deactivation is hashed, recomputes the close, and causes dependent certificate verification to fail | Certificate revocation registry and period locking |
 | LLM invents evidence | Only deterministic control JSON enters prompt; output advisory | Prompt/eval monitoring and data-loss prevention |
 | LLM sees transaction PII during schema mapping | Only header names/targets are sent; output allow-listed; human confirmation required | DLP-classified headers, provider agreement, or local mapping model |
 | Prompt injection in a malicious column header | Model cannot emit new fields/columns or commit; confirmation resets after suggestion | Header sanitization, model isolation, prompt-injection evaluation |
@@ -42,7 +45,7 @@
 
 Import manifests use a real Ed25519 signature, but the private key is ephemeral and the public key
 is self-contained; without an externally pinned fingerprint it proves integrity, not organizational
-identity. Close certificates and controller actions are hashed but are not externally signed. CSV
-staging and manifests are in memory, and imported evidence does not replace the synthetic close
-workspace. The demo has no authentication or tenant isolation. These are explicit non-production
-boundaries, not hidden claims.
+identity. Close certificates, controller resolutions, and activation actions are hashed but are not
+externally signed. CSV staging, manifests, and activation history are in memory. Activated evidence
+does participate in the close, but the supplied actor identity is not authenticated. The demo has
+no tenant isolation. These are explicit non-production boundaries, not hidden claims.

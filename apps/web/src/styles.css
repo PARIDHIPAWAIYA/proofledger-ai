@@ -90,6 +90,10 @@ h1, h2, h3, p { margin-top: 0; }
 .metric-card > span { display: block; color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; }
 .metric-card strong { display: block; margin: 9px 0 6px; font-size: 25px; letter-spacing: -.04em; }
 .metric-card small { color: #858b88; font-size: 10px; }
+.active-import-banner { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 11px; width: 100%; margin: -2px 0 14px; padding: 12px 15px; color: #174c3d; background: var(--safe-soft); border: 1px solid #b8d6ca; border-radius: 10px; text-align: left; }
+.active-import-banner span, .active-import-banner strong, .active-import-banner small { display: block; }
+.active-import-banner strong { font-size: 10px; }
+.active-import-banner small { margin-top: 3px; color: #527468; font-size: 8px; }
 
 .dashboard-grid { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(320px, .85fr); gap: 14px; margin-bottom: 14px; }
 .dashboard-grid.lower { grid-template-columns: minmax(0, 1.25fr) minmax(360px, 1fr); }
@@ -313,6 +317,7 @@ h1, h2, h3, p { margin-top: 0; }
 .manifest-card { display: grid; grid-template-columns: 150px 1fr; overflow: hidden; color: #dcebe5; background: linear-gradient(135deg, #13241f, #1b4639); border: 1px solid #316552; border-radius: 12px; box-shadow: 0 14px 35px rgba(19,36,31,.16); }
 .manifest-seal { display: grid; place-content: center; justify-items: center; gap: 8px; color: #d9b85d; background: rgba(0,0,0,.12); border-right: 1px solid rgba(255,255,255,.09); }
 .manifest-seal span { font: 500 9px "DM Mono", monospace; letter-spacing: .08em; }
+.manifest-seal.active { color: #153d32; background: #bce1d3; }
 .manifest-copy { padding: 22px; }
 .manifest-copy .panel-kicker { color: #87b5a5; }
 .manifest-copy h2 { margin-bottom: 7px; font-size: 18px; }
@@ -322,12 +327,35 @@ h1, h2, h3, p { margin-top: 0; }
 .manifest-hashes span { color: #90a89f; font-size: 8px; font-weight: 800; text-transform: uppercase; }
 .manifest-hashes code { overflow: hidden; color: #dbe8e3; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .manifest-card .text-button { color: #9fc4b7; }
+.activation-workbench { margin-top: 15px; padding: 14px; color: var(--ink); background: #f5f3ed; border: 1px solid #d5d4ce; border-radius: 9px; }
+.activation-workbench .workbench-heading { margin-bottom: 12px; }
+.activation-workbench .workbench-heading > span { color: var(--safe); font-size: 8px; }
+.activation-fields { display: grid; grid-template-columns: minmax(180px, .7fr) minmax(300px, 1.3fr); gap: 10px; }
+.activation-fields input, .activation-fields textarea { width: 100%; padding: 9px 10px; color: var(--ink); background: white; border: 1px solid var(--line); border-radius: 7px; outline: 0; font-size: 9px; text-transform: none; }
+.activation-fields textarea { min-height: 55px; resize: vertical; }
+.activation-fields input:focus, .activation-fields textarea:focus { border-color: var(--safe); box-shadow: 0 0 0 3px rgba(30,106,85,.09); }
+.activation-action-row { display: flex; align-items: center; justify-content: space-between; gap: 15px; margin-top: 11px; padding-top: 11px; border-top: 1px solid var(--line); }
+.activation-action-row p { max-width: 680px; margin: 0; color: var(--muted); font-size: 8px; line-height: 1.55; }
+.activation-impact { display: grid; grid-template-columns: 52px 1fr; gap: 15px; margin-top: 14px; padding: 18px; color: #174c3d; background: var(--safe-soft); border: 1px solid #afd0c3; border-radius: 11px; }
+.activation-impact.deactivate { color: #704f18; background: #f2ead7; border-color: #ddcea4; }
+.impact-icon { display: grid; place-items: center; width: 43px; height: 43px; background: rgba(255,255,255,.7); border-radius: 50%; }
+.impact-copy h2 { margin: 0 0 12px; color: var(--ink); font-size: 15px; }
+.impact-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-bottom: 10px; overflow: hidden; background: rgba(23,76,61,.16); border-radius: 7px; }
+.impact-metrics > span { min-width: 0; padding: 9px 10px; background: rgba(255,255,255,.65); }
+.impact-metrics small, .impact-metrics strong, .impact-metrics code { display: block; }
+.impact-metrics small { margin-bottom: 4px; font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.impact-metrics strong { color: var(--ink); font-size: 11px; }
+.impact-metrics code { overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.impact-settlement { display: grid; grid-template-columns: 1fr .7fr 1.2fr; gap: 10px; margin-bottom: 10px; padding: 8px 10px; background: rgba(255,255,255,.55); border-radius: 6px; font-size: 8px; text-transform: capitalize; }
+.impact-settlement strong { font: 600 8px "DM Mono", monospace; }
 .manifest-history { margin-top: 14px; }
-.manifest-row { display: grid; grid-template-columns: 26px 1fr auto; align-items: center; gap: 9px; width: 100%; padding: 10px 0; color: var(--ink); background: transparent; border: 0; border-top: 1px solid var(--line); text-align: left; }
+.manifest-row { display: grid; grid-template-columns: 26px 1fr auto auto; align-items: center; gap: 9px; width: 100%; padding: 10px 0; color: var(--ink); background: transparent; border: 0; border-top: 1px solid var(--line); text-align: left; }
 .manifest-row > svg { color: var(--safe); }
 .manifest-row strong, .manifest-row small { display: block; }
 .manifest-row strong { font-size: 9px; } .manifest-row small { margin-top: 2px; color: var(--muted); font-size: 8px; }
 .manifest-row code { color: var(--safe); font-size: 8px; }
+.manifest-state { padding: 4px 6px; color: var(--muted); background: #eceae4; border-radius: 999px; font-size: 7px; font-weight: 800; text-transform: uppercase; }
+.manifest-state.active { color: var(--safe); background: var(--safe-soft); }
 
 .state-panel { min-height: 70vh; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); font-size: 12px; }
 .state-panel.error { color: var(--risk); }
@@ -371,6 +399,11 @@ h1, h2, h3, p { margin-top: 0; }
   .manifest-card { grid-template-columns: 1fr; }
   .manifest-seal { padding: 18px; border-right: 0; border-bottom: 1px solid rgba(255,255,255,.09); }
   .manifest-hashes div { grid-template-columns: 1fr; }
+  .activation-fields { grid-template-columns: 1fr; }
+  .activation-action-row { align-items: stretch; flex-direction: column; }
+  .impact-metrics { grid-template-columns: 1fr 1fr; }
+  .manifest-row { grid-template-columns: 24px 1fr auto; }
+  .manifest-row code { display: none; }
   .candidate-head, .candidate-row { grid-template-columns: 1fr 90px; }
   .candidate-head span:nth-child(2), .candidate-row span:nth-child(2) { display: none; }
   .resolution-result { grid-template-columns: 36px 1fr; }

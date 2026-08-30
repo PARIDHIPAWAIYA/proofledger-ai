@@ -7,6 +7,7 @@ from proofledger.config import Settings
 from proofledger.domain.ingestion import AmountUnit, IngestionSource
 from proofledger.main import app
 from proofledger.services.ai import BoundedSchemaMapper
+from proofledger.services.closing import SettlementCertificateService
 from proofledger.services.ingestion import IngestionError, IngestionService
 from proofledger.services.workspace import DemoWorkspace
 
@@ -201,5 +202,139 @@ def test_ingestion_api_preview_commit_and_verify() -> None:
         )
         assert verified.json()["valid"] is True
         assert tampered.json()["valid"] is False
+    finally:
+        app.dependency_overrides.pop(get_workspace, None)
+
+
+def test_signed_import_activation_recomputes_close_and_can_be_reversed() -> None:
+    workspace = DemoWorkspace(seed=11, order_count=120, settlement_size=20)
+    demo = workspace.demo_bank_statement()
+    settlement = workspace.settlement(demo["settlement_id"])
+    assert settlement is not None
+    before = workspace.settlement_summary(settlement)
+    before_queue = len(workspace.questions)
+
+    preview = workspace.ingestion.preview(
+        demo["filename"],
+        demo["content"].encode(),
+        IngestionSource.BANK_STATEMENT,
+    )
+    manifest, imported = workspace.ingestion.commit(
+        preview.upload_id,
+        _suggested_mapping(preview),
+        AmountUnit.RUPEES,
+    )
+    assert workspace.settlement_summary(settlement) == before
+
+    outcome = workspace.activate_manifest(
+        manifest.manifest_id,
+        actor="controller@demo",
+        rationale="Verified the signed source and approved it for the July close.",
+    )
+
+    after = workspace.settlement_summary(settlement)
+    assert before["status"] == "blocked"
+    assert after["status"] == "ready"
+    assert len(workspace.questions) == before_queue - 1
+    assert outcome["audit_verified"] is True
+    assert outcome["after"]["imported_records"] == 1
+    assert imported[0].record_id in workspace.records_by_id
+    certificate = SettlementCertificateService().issue(
+        settlement,
+        workspace.effective_records,
+        workspace.controls,
+    )
+    assert imported[0].record_id in certificate.evidence_hashes
+
+    reversed_outcome = workspace.deactivate_manifest(
+        manifest.manifest_id,
+        actor="controller@demo",
+        rationale="Reversing the demo activation after validating its downstream impact.",
+    )
+    assert reversed_outcome["audit_verified"] is True
+    assert workspace.settlement_summary(settlement)["status"] == "blocked"
+    assert len(workspace.ingestion_activations) == 2
+    assert all(event.verify_integrity() for event in workspace.ingestion_activations)
+    assert not SettlementCertificateService.verify(
+        certificate,
+        workspace.effective_records,
+    ).valid
+
+
+def test_activation_rejects_duplicate_bank_row_that_masks_mismatch() -> None:
+    workspace = DemoWorkspace(seed=11, order_count=120, settlement_size=20)
+    settlement = workspace.settlement("setl_demo_0002")
+    assert settlement is not None
+    amount = f"{settlement.amount_paise // 100}.{settlement.amount_paise % 100:02d}"
+    content = (
+        "Transaction ID,Value Date,Credit Amount,UTR,Settlement ID\n"
+        f"mask_attempt,2026-07-20,{amount},{settlement.bank_reference},"
+        f"{settlement.settlement_id}\n"
+    ).encode()
+    preview = workspace.ingestion.preview(
+        "mask.csv",
+        content,
+        IngestionSource.BANK_STATEMENT,
+    )
+    manifest, _ = workspace.ingestion.commit(
+        preview.upload_id,
+        _suggested_mapping(preview),
+        AmountUnit.RUPEES,
+    )
+
+    with pytest.raises(IngestionError, match="masking"):
+        workspace.activate_manifest(
+            manifest.manifest_id,
+            actor="controller@demo",
+            rationale="Attempting to add a convenient second bank row.",
+        )
+
+    assert manifest.manifest_id not in workspace.active_manifest_ids
+    assert workspace.settlement_summary(settlement)["status"] == "blocked"
+
+
+def test_activation_api_exposes_audited_downstream_impact() -> None:
+    workspace = DemoWorkspace(seed=17, order_count=80, settlement_size=20)
+    app.dependency_overrides[get_workspace] = lambda: workspace
+    client = TestClient(app)
+    try:
+        demo = client.get("/api/v1/ingestion/demo-bank-statement").json()
+        preview = client.post(
+            "/api/v1/ingestion/preview?source_type=bank_statement",
+            files={"file": (demo["filename"], demo["content"], "text/csv")},
+        ).json()
+        mapping = {
+            item["canonical_field"]: item["source_column"]
+            for item in preview["suggestions"]
+            if item["source_column"]
+        }
+        committed = client.post(
+            "/api/v1/ingestion/commit",
+            json={
+                "upload_id": preview["upload_id"],
+                "field_mapping": mapping,
+                "amount_unit": "rupees",
+            },
+        ).json()
+        manifest_id = committed["manifest"]["manifest_id"]
+        activated = client.post(
+            f"/api/v1/ingestion/manifests/{manifest_id}/activate",
+            json={
+                "actor": "controller@demo",
+                "rationale": "Approved signed bank evidence through the API test.",
+            },
+        )
+
+        assert activated.status_code == 200
+        payload = activated.json()
+        assert payload["audit_verified"] is True
+        assert payload["after"]["review_queue"] == payload["before"]["review_queue"] - 1
+        assert payload["affected_settlements"][0]["after"]["status"] == "ready"
+        overview = client.get("/api/v1/overview").json()
+        assert overview["active_imports"] == 1
+        assert overview["imported_records"] == 1
+        history = client.get("/api/v1/ingestion/activations").json()
+        assert history[0]["manifest_id"] == manifest_id
+        assert history[0]["activation_hash"]
     finally:
         app.dependency_overrides.pop(get_workspace, None)

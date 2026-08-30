@@ -115,7 +115,7 @@ function App() {
         </header>
         <Suspense fallback={<LoadingState />}>
           {page === "dashboard" && <DashboardPage onNavigate={navigate} />}
-          {page === "intake" && <DataIntakePage />}
+          {page === "intake" && <DataIntakePage onNavigate={navigate} />}
           {page === "settlements" && <SettlementsPage />}
           {page === "reviews" && <ReviewPage />}
           {page === "graph" && <EvidenceGraphPage />}

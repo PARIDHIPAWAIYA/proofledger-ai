@@ -16,9 +16,12 @@ Open **Evidence intake** and click **Run judge-ready demo file**.
 - Show deterministic mapping confidence and click **Improve with bounded AI**.
 - Stress that only headers go to Gemini and controller confirmation resets.
 - Confirm the mapping, sign the import, verify it, then simulate a ₹1 mutation.
+- Verify again, enter controller authority, and activate the signed source.
+- Show the review queue fall and the settlement move from blocked to ready, then open the dashboard
+  and point to the active-import provenance banner.
 
-Key sentence: “AI helps understand the shape; deterministic code validates the money; the signed
-manifest makes every accepted row challengeable.”
+Key sentence: “AI understands the shape, deterministic code validates the money, cryptography
+protects the batch, and a separately audited controller action decides whether it enters the close.”
 
 ## 1:30–2:10 — One graph across five systems
 
@@ -89,7 +92,7 @@ State clearly that results are synthetic.
 
 “AI only explains deterministic exceptions and suggests mappings from header names. It cannot see
 transaction rows or approve imports, matches, journals, or financial close. The repository includes
-domain invariants, 30 backend/API tests, frontend lint/tests/build, CI, a production dependency
+domain invariants, 33 backend/API tests, frontend lint/tests/build, CI, a production dependency
 audit, Docker deployment, and honest limitations.”
 
 Finish on the dashboard with: “ProofLedger is not another finance chatbot. It is an evidence and

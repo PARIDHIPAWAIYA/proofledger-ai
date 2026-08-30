@@ -44,6 +44,11 @@ class IngestionCommitRequest(BaseModel):
     amount_unit: AmountUnit = AmountUnit.RUPEES
 
 
+class ManifestActivationRequest(BaseModel):
+    actor: str = Field(min_length=3, max_length=120)
+    rationale: str = Field(min_length=8, max_length=500)
+
+
 def ingestion_http_error(error: IngestionError, status_code: int = 422) -> HTTPException:
     return HTTPException(
         status_code=status_code,
@@ -238,6 +243,51 @@ def commit_ingestion(
 @router.get("/ingestion/manifests")
 def ingestion_manifests(workspace: WorkspaceDependency):
     return list(reversed(list(workspace.ingestion.manifests.values())))
+
+
+@router.get("/ingestion/activations")
+def ingestion_activations(workspace: WorkspaceDependency):
+    return list(reversed(workspace.ingestion_activations))
+
+
+@router.get("/ingestion/demo-bank-statement")
+def ingestion_demo_bank_statement(workspace: WorkspaceDependency):
+    try:
+        return workspace.demo_bank_statement()
+    except IngestionError as error:
+        raise ingestion_http_error(error, 409) from error
+
+
+@router.post("/ingestion/manifests/{manifest_id}/activate")
+def activate_ingestion_manifest(
+    manifest_id: str,
+    request: ManifestActivationRequest,
+    workspace: WorkspaceDependency,
+):
+    try:
+        return workspace.activate_manifest(
+            manifest_id,
+            actor=request.actor,
+            rationale=request.rationale,
+        )
+    except IngestionError as error:
+        raise ingestion_http_error(error, 409) from error
+
+
+@router.post("/ingestion/manifests/{manifest_id}/deactivate")
+def deactivate_ingestion_manifest(
+    manifest_id: str,
+    request: ManifestActivationRequest,
+    workspace: WorkspaceDependency,
+):
+    try:
+        return workspace.deactivate_manifest(
+            manifest_id,
+            actor=request.actor,
+            rationale=request.rationale,
+        )
+    except IngestionError as error:
+        raise ingestion_http_error(error, 409) from error
 
 
 @router.post("/ingestion/manifests/{manifest_id}/verify")

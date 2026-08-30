@@ -1,17 +1,24 @@
 import {
+  ArrowRight,
   Bot,
   CheckCircle2,
   Download,
   FileKey2,
   FlaskConical,
+  Power,
+  PowerOff,
   ShieldCheck,
   UploadCloud,
   XCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import type { Page } from "../App";
 import { api } from "../api";
 import type {
   AIMappingResponse,
+  ActivationOutcome,
+  DemoBankStatement,
+  IngestionActivation,
   IngestionCommitResponse,
   IngestionManifest,
   IngestionPreview,
@@ -19,12 +26,6 @@ import type {
   IngestionVerification,
 } from "../types";
 import { PageHeader } from "./Shared";
-
-const DEMO_BANK_CSV = `Transaction ID,Value Date,Credit Amount,UTR,Description
-bank_demo_001,18/07/2026,1250.50,UTR-DEMO-1001,Razorpay settlement
-bank_demo_002,19/07/2026,999.00,UTR-DEMO-1002,Razorpay settlement
-bank_demo_003,20/07/2026,4320.75,UTR-DEMO-1003,Razorpay settlement
-`;
 
 const SOURCE_LABELS: Record<IngestionSource, string> = {
   razorpay_settlements: "Razorpay settlements",
@@ -36,7 +37,7 @@ function shortHash(value: string) {
   return `${value.slice(0, 12)}…${value.slice(-8)}`;
 }
 
-function DataIntakePage() {
+function DataIntakePage({ onNavigate }: { onNavigate: (page: Page) => void }) {
   const [source, setSource] = useState<IngestionSource>("bank_statement");
   const [preview, setPreview] = useState<IngestionPreview | null>(null);
   const [mapping, setMapping] = useState<Record<string, string>>({});
@@ -44,31 +45,44 @@ function DataIntakePage() {
   const [confirmed, setConfirmed] = useState(false);
   const [manifest, setManifest] = useState<IngestionManifest | null>(null);
   const [manifests, setManifests] = useState<IngestionManifest[]>([]);
+  const [activations, setActivations] = useState<IngestionActivation[]>([]);
+  const [activationOutcome, setActivationOutcome] = useState<ActivationOutcome | null>(null);
   const [verification, setVerification] = useState<IngestionVerification | null>(null);
+  const [actor, setActor] = useState("controller@proofledger.demo");
+  const [rationale, setRationale] = useState(
+    "Verified the signed source and approved it for the July close.",
+  );
   const [aiNote, setAiNote] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
 
-  const loadManifests = () =>
-    api<IngestionManifest[]>("/ingestion/manifests")
-      .then(setManifests)
+  const loadWorkspaceData = () =>
+    Promise.all([
+      api<IngestionManifest[]>("/ingestion/manifests"),
+      api<IngestionActivation[]>("/ingestion/activations"),
+    ])
+      .then(([nextManifests, nextActivations]) => {
+        setManifests(nextManifests);
+        setActivations(nextActivations);
+      })
       .catch(() => undefined);
 
   useEffect(() => {
-    void loadManifests();
+    void loadWorkspaceData();
   }, []);
 
-  const upload = async (file: File) => {
+  const upload = async (file: File, sourceOverride: IngestionSource = source) => {
     setBusy("preview");
     setError("");
     setManifest(null);
     setVerification(null);
+    setActivationOutcome(null);
     setConfirmed(false);
     try {
       const form = new FormData();
       form.append("file", file);
       const next = await api<IngestionPreview>(
-        `/ingestion/preview?source_type=${source}`,
+        `/ingestion/preview?source_type=${sourceOverride}`,
         { method: "POST", body: form },
       );
       setPreview(next);
@@ -87,8 +101,21 @@ function DataIntakePage() {
     }
   };
 
-  const useDemo = () =>
-    upload(new File([DEMO_BANK_CSV], "demo-bank-statement.csv", { type: "text/csv" }));
+  const useDemo = async () => {
+    setBusy("demo");
+    setError("");
+    try {
+      const demo = await api<DemoBankStatement>("/ingestion/demo-bank-statement");
+      setSource("bank_statement");
+      await upload(
+        new File([demo.content], demo.filename, { type: "text/csv" }),
+        "bank_statement",
+      );
+    } catch (reason) {
+      setError((reason as Error).message);
+      setBusy("");
+    }
+  };
 
   const askAI = async () => {
     if (!preview) return;
@@ -129,7 +156,7 @@ function DataIntakePage() {
       setManifest(result.manifest);
       setPreview(null);
       setVerification(null);
-      await loadManifests();
+      await loadWorkspaceData();
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -154,6 +181,27 @@ function DataIntakePage() {
     }
   };
 
+  const changeActivation = async (action: "activate" | "deactivate") => {
+    if (!manifest) return;
+    setBusy(action);
+    setError("");
+    try {
+      const result = await api<ActivationOutcome>(
+        `/ingestion/manifests/${manifest.manifest_id}/${action}`,
+        {
+          method: "POST",
+          body: JSON.stringify({ actor, rationale }),
+        },
+      );
+      setActivationOutcome(result);
+      await loadWorkspaceData();
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy("");
+    }
+  };
+
   const downloadManifest = () => {
     if (!manifest) return;
     const url = URL.createObjectURL(
@@ -167,6 +215,10 @@ function DataIntakePage() {
   };
 
   const requiredReady = preview?.required_fields.every((field) => mapping[field]);
+  const latestActivation = manifest
+    ? activations.find((item) => item.manifest_id === manifest.manifest_id)
+    : undefined;
+  const manifestActive = latestActivation?.action === "activate";
 
   return (
     <div className="page intake-page">
@@ -184,6 +236,8 @@ function DataIntakePage() {
         <span><ShieldCheck size={16} /> Human confirmation</span>
         <i>→</i>
         <span><FileKey2 size={16} /> Signed evidence</span>
+        <i>→</i>
+        <span><Power size={16} /> Controller activation</span>
       </section>
 
       {error && <div className="review-action-error"><XCircle size={16} />{error}</div>}
@@ -217,7 +271,7 @@ function DataIntakePage() {
               />
             </label>
             <button className="secondary-button" onClick={useDemo} disabled={Boolean(busy)}>
-              <FlaskConical size={14} /> Run judge-ready demo file
+              <FlaskConical size={14} /> {busy === "demo" ? "Preparing…" : "Run close-impact demo"}
             </button>
           </article>
         </section>
@@ -293,11 +347,14 @@ function DataIntakePage() {
 
       {manifest && (
         <section className="manifest-card">
-          <div className="manifest-seal"><ShieldCheck size={30} /><span>Ed25519</span></div>
+          <div className={`manifest-seal ${manifestActive ? "active" : ""}`}>
+            {manifestActive ? <Power size={30} /> : <ShieldCheck size={30} />}
+            <span>{manifestActive ? "ACTIVE" : "Ed25519"}</span>
+          </div>
           <div className="manifest-copy">
             <span className="panel-kicker">03 · Evidence sealed</span>
-            <h2>{manifest.record_count} records committed atomically</h2>
-            <p>The manifest binds the original file hash, confirmed mapping, normalized record hashes, timestamp, and public verification key.</p>
+            <h2>{manifest.record_count} records normalized and signed</h2>
+            <p>The manifest binds the original file hash, confirmed mapping, normalized record hashes, timestamp, and public verification key. Signing does not silently make the data authoritative—the controller activates it separately.</p>
             <div className="manifest-hashes">
               <div><span>Manifest hash</span><code title={manifest.manifest_hash}>{manifest.manifest_hash}</code></div>
               <div><span>Public key</span><code title={manifest.signing_public_key}>{manifest.signing_public_key}</code></div>
@@ -317,6 +374,53 @@ function DataIntakePage() {
                 </div>
               </div>
             )}
+
+            <div className="activation-workbench">
+              <div className="workbench-heading">
+                <div><span className="panel-kicker">04 · Controller authority</span><strong>{manifestActive ? "This source is live in the close engine" : "Activate only after independent verification"}</strong></div>
+                <span>{latestActivation ? shortHash(latestActivation.activation_hash) : "not activated"}</span>
+              </div>
+              <div className="activation-fields">
+                <label className="field-label">Controller identity<input value={actor} onChange={(event) => setActor(event.target.value)} /></label>
+                <label className="field-label">Audit rationale<textarea value={rationale} onChange={(event) => setRationale(event.target.value)} /></label>
+              </div>
+              <div className="activation-action-row">
+                <p>{manifestActive ? "Deactivation recomputes the workspace and may invalidate certificates that depended on these rows." : "The server re-verifies the signature, rejects duplicate identities and anti-masking violations, then recomputes every downstream result."}</p>
+                {manifestActive ? (
+                  <button className="danger-button" onClick={() => changeActivation("deactivate")} disabled={Boolean(busy) || rationale.length < 8 || actor.length < 3}>
+                    <PowerOff size={14} /> {busy === "deactivate" ? "Recomputing…" : "Deactivate source"}
+                  </button>
+                ) : (
+                  <button className="primary-button" onClick={() => changeActivation("activate")} disabled={Boolean(busy) || !verification?.valid || rationale.length < 8 || actor.length < 3}>
+                    <Power size={14} /> {busy === "activate" ? "Recomputing close…" : "Activate in controller"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activationOutcome && (
+        <section className={`activation-impact ${activationOutcome.activation.action}`}>
+          <div className="impact-icon">{activationOutcome.activation.action === "activate" ? <CheckCircle2 size={24} /> : <PowerOff size={24} />}</div>
+          <div className="impact-copy">
+            <span className="panel-kicker">Live recomputation result</span>
+            <h2>{activationOutcome.activation.action === "activate" ? "Signed evidence is now authoritative" : "Source removed and close recomputed"}</h2>
+            <div className="impact-metrics">
+              <span><small>Review queue</small><strong>{activationOutcome.before.review_queue} → {activationOutcome.after.review_queue}</strong></span>
+              <span><small>Ready settlements</small><strong>{activationOutcome.before.ready_settlements} → {activationOutcome.after.ready_settlements}</strong></span>
+              <span><small>Evidence records</small><strong>{activationOutcome.before.evidence_records} → {activationOutcome.after.evidence_records}</strong></span>
+              <span><small>Audit hash</small><code>{shortHash(activationOutcome.activation.activation_hash)}</code></span>
+            </div>
+            {activationOutcome.affected_settlements.map((item) => (
+              <div className="impact-settlement" key={item.settlement_id}>
+                <strong>{item.settlement_id}</strong>
+                <span>{item.before?.status ?? "absent"} → {item.after?.status ?? "absent"}</span>
+                <span>{item.before?.decision_status?.replaceAll("_", " ") ?? "none"} → {item.after?.decision_status?.replaceAll("_", " ") ?? "none"}</span>
+              </div>
+            ))}
+            <button className="secondary-button" onClick={() => onNavigate("dashboard")}>See recomputed close command <ArrowRight size={14} /></button>
           </div>
         </section>
       )}
@@ -325,8 +429,12 @@ function DataIntakePage() {
         <article className="panel manifest-history">
           <span className="panel-kicker">Signed import history</span>
           {manifests.map((item) => (
-            <button className="manifest-row" key={item.manifest_id} onClick={() => { setManifest(item); setPreview(null); setVerification(null); }}>
-              <FileKey2 size={16} /><span><strong>{item.filename}</strong><small>{item.record_count} records · {SOURCE_LABELS[item.source_type]}</small></span><code>{shortHash(item.manifest_hash)}</code>
+            <button className="manifest-row" key={item.manifest_id} onClick={() => { setManifest(item); setPreview(null); setVerification(null); setActivationOutcome(null); }}>
+              <FileKey2 size={16} /><span><strong>{item.filename}</strong><small>{item.record_count} records · {SOURCE_LABELS[item.source_type]}</small></span>
+              <span className={activations.find((event) => event.manifest_id === item.manifest_id)?.action === "activate" ? "manifest-state active" : "manifest-state"}>
+                {activations.find((event) => event.manifest_id === item.manifest_id)?.action === "activate" ? "active" : "signed"}
+              </span>
+              <code>{shortHash(item.manifest_hash)}</code>
             </button>
           ))}
         </article>

@@ -41,3 +41,11 @@ Schema ambiguity benefits from language understanding, but finance rows may cont
 data and AI cannot be authoritative. Gemini receives column names and allowed targets only. Its
 response is constrained to those values, cannot invoke commit, and resets controller confirmation.
 Deterministic aliases remain the offline fallback.
+
+## ADR-008: Signed does not mean authoritative
+
+Cryptographic integrity and controller authority are different claims. Committing a CSV creates a
+signed, inactive evidence batch. A separate activation verifies the signature and record hashes,
+checks source-identity collisions and anti-masking rules, captures actor/rationale in an append-only
+hashed event, and recomputes all downstream outputs. Deactivation is equally explicit and auditable.
+Production must add authenticated maker-checker authorization and transactional period state.

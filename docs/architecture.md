@@ -62,6 +62,13 @@ mapping, normalized record hashes, import timestamp, and public key. Verificatio
 manifest hash, signature, and every record hash. The demo key is generated at process start; a
 production verifier must pin a tenant key or trust a KMS-backed certificate chain.
 
+Signing and authority are separate operations. A signed batch remains staged until a controller
+supplies an identity and rationale. Activation re-verifies the complete manifest, rejects record
+identity collisions and duplicate bank rows that could mask an existing mismatch, then adds the
+records to the authoritative evidence view. Graphs, reconciliation, controls, reviews, journal
+proposals, and certificates are derived again. Activation/deactivation events are append-only and
+carry their own canonical SHA-256 audit hash.
+
 ## Object-centric graph
 
 The graph is bipartite at its evidence layer:
@@ -111,8 +118,9 @@ that source discrepancy.
 ## Runtime
 
 The Buildathon demo uses an in-memory deterministic workspace so cloning the repository produces
-the same scenario without credentials. The domain layer is storage-agnostic; production would
-replace the workspace with durable repositories and authenticated connectors.
+the same scenario without credentials. Signed imports and activation events also remain in memory.
+The domain layer is storage-agnostic; production would replace the workspace with durable
+repositories, authenticated connectors, transactional activation, and maker-checker authorization.
 
 ## Frontend
 

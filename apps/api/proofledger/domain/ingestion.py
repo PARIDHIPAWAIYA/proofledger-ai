@@ -4,9 +4,10 @@ import base64
 import binascii
 from datetime import datetime, timezone
 from enum import Enum
+from uuid import uuid4
 
 from cryptography.exceptions import InvalidSignature
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from proofledger.domain.models import stable_hash
 
@@ -20,6 +21,11 @@ class IngestionSource(str, Enum):
 class AmountUnit(str, Enum):
     RUPEES = "rupees"
     PAISE = "paise"
+
+
+class ActivationAction(str, Enum):
+    ACTIVATE = "activate"
+    DEACTIVATE = "deactivate"
 
 
 class MappingSuggestion(BaseModel):
@@ -96,3 +102,34 @@ class IngestionVerification(BaseModel):
     valid: bool
     checks: dict[str, bool]
     failures: list[str]
+
+
+class IngestionActivation(BaseModel):
+    """Append-only audit event controlling whether a signed import is authoritative."""
+
+    model_config = ConfigDict(frozen=True)
+
+    activation_id: str = Field(default_factory=lambda: f"act_{uuid4().hex[:12]}")
+    manifest_id: str
+    manifest_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    action: ActivationAction
+    actor: str = Field(min_length=3, max_length=120)
+    rationale: str = Field(min_length=8, max_length=500)
+    record_count: int = Field(gt=0)
+    affected_settlement_ids: list[str]
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    activation_hash: str = ""
+
+    @model_validator(mode="after")
+    def populate_and_validate_hash(self) -> IngestionActivation:
+        payload = self.model_dump(exclude={"activation_hash"}, mode="json")
+        expected = stable_hash(payload)
+        if self.activation_hash and self.activation_hash != expected:
+            raise ValueError("activation_hash does not match the activation event")
+        if not self.activation_hash:
+            object.__setattr__(self, "activation_hash", expected)
+        return self
+
+    def verify_integrity(self) -> bool:
+        payload = self.model_dump(exclude={"activation_hash"}, mode="json")
+        return self.activation_hash == stable_hash(payload)
