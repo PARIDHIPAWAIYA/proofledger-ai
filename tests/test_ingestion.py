@@ -25,6 +25,77 @@ def _suggested_mapping(preview) -> dict[str, str]:
     }
 
 
+MERCHANT_ORDER_CSV = b"""Order ID,Order Date,Order Amount,Customer,Status
+order_501,18/07/2026,1250.50,cust_11,paid
+order_502,19/07/2026,999.00,cust_12,paid
+"""
+
+REFUND_CSV = b"""Refund ID,Refund Date,Refund Amount,Order ID,Payment ID,Status
+rfnd_501,20/07/2026,150.00,order_501,pay_501,processed
+"""
+
+
+def test_merchant_orders_import_normalizes_into_order_evidence() -> None:
+    service = IngestionService()
+    preview = service.preview(
+        "orders.csv",
+        MERCHANT_ORDER_CSV,
+        IngestionSource.MERCHANT_ORDERS,
+    )
+
+    _, records = service.commit(
+        preview.upload_id,
+        _suggested_mapping(preview),
+        AmountUnit.RUPEES,
+    )
+
+    assert [record.object_type.value for record in records] == ["order", "order"]
+    assert [record.source.value for record in records] == [
+        "merchant_orders",
+        "merchant_orders",
+    ]
+    assert [record.amount_paise for record in records] == [125050, 99900]
+    assert records[0].order_id == "order_501"
+    assert records[0].attributes["merchant_customer_key"] == "cust_11"
+    assert all(record.verify_integrity() for record in records)
+
+
+def test_refund_register_import_requires_order_and_payment_references() -> None:
+    service = IngestionService()
+    preview = service.preview(
+        "refunds.csv",
+        REFUND_CSV,
+        IngestionSource.REFUND_REGISTER,
+    )
+    mapping = _suggested_mapping(preview)
+
+    assert mapping["order_id"] == "Order ID"
+    assert mapping["payment_id"] == "Payment ID"
+
+    _, records = service.commit(preview.upload_id, mapping, AmountUnit.RUPEES)
+    record = records[0]
+
+    assert record.object_type.value == "refund"
+    assert record.source.value == "refund_register"
+    assert record.refund_id == "rfnd_501"
+    assert record.order_id == "order_501"
+    assert record.payment_id == "pay_501"
+    assert record.amount_paise == 15000
+
+    unmapped_service = IngestionService()
+    incomplete = unmapped_service.preview(
+        "refunds.csv",
+        REFUND_CSV,
+        IngestionSource.REFUND_REGISTER,
+    )
+    with pytest.raises(IngestionError, match="required fields are unmapped"):
+        unmapped_service.commit(
+            incomplete.upload_id,
+            {key: value for key, value in mapping.items() if key != "payment_id"},
+            AmountUnit.RUPEES,
+        )
+
+
 def test_preview_maps_headers_without_committing_records() -> None:
     service = IngestionService()
 

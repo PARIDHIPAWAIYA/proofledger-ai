@@ -162,6 +162,29 @@ export type SettlementDetail = {
   certificate_id: string | null;
 };
 
+export type Calibration = {
+  profile: {
+    alpha: number;
+    sample_size: number;
+    minimum_confidence: number;
+    empirical_coverage: number;
+    assumptions: string[];
+  };
+  calibration_size: number;
+  holdout_size: number;
+  holdout_coverage: number;
+  singleton_sets: number;
+  empty_sets: number;
+  candidate_sets: Array<{
+    decision_id: string;
+    settlement_record_id: string;
+    decision_status: string;
+    candidates_generated: number;
+    candidate_set: string[];
+  }>;
+  caveats: string[];
+};
+
 export type GraphData = {
   nodes: Array<{ id: string; kind: "object" | "event"; label: string }>;
   edges: Array<{
@@ -173,7 +196,9 @@ export type GraphData = {
 };
 
 export type IngestionSource =
+  | "merchant_orders"
   | "razorpay_settlements"
+  | "refund_register"
   | "bank_statement"
   | "general_ledger";
 

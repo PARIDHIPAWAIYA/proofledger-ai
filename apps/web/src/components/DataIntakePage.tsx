@@ -28,7 +28,9 @@ import type {
 import { PageHeader } from "./Shared";
 
 const SOURCE_LABELS: Record<IngestionSource, string> = {
+  merchant_orders: "Merchant orders",
   razorpay_settlements: "Razorpay settlements",
+  refund_register: "Refund register",
   bank_statement: "Bank statement",
   general_ledger: "General ledger",
 };

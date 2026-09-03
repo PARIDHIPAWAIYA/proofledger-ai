@@ -1,7 +1,7 @@
-import { FlaskConical, ShieldCheck, TriangleAlert } from "lucide-react";
+import { FlaskConical, Ruler, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, formatPercent } from "../api";
-import type { Benchmark, BenchmarkMetric } from "../types";
+import type { Benchmark, BenchmarkMetric, Calibration } from "../types";
 import { ErrorState, LoadingState, PageHeader } from "./Shared";
 
 function MetricRow({ metric }: { metric: BenchmarkMetric }) {
@@ -25,12 +25,16 @@ function MetricRow({ metric }: { metric: BenchmarkMetric }) {
 
 function BenchmarkPage() {
   const [benchmark, setBenchmark] = useState<Benchmark | null>(null);
+  const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
     api<Benchmark>("/benchmark")
       .then(setBenchmark)
       .catch((reason: Error) => setError(reason.message));
+    api<Calibration>("/calibration")
+      .then(setCalibration)
+      .catch(() => setCalibration(null));
   }, []);
 
   if (error) return <ErrorState message={error} />;
@@ -88,6 +92,56 @@ function BenchmarkPage() {
           </div>
         </article>
       </section>
+
+      {calibration && (
+        <article className="panel calibration-panel">
+          <div className="panel-heading">
+            <div>
+              <span className="panel-kicker">Split-conformal calibration</span>
+              <h2>The abstention threshold is fitted, not hand-picked</h2>
+            </div>
+            <Ruler size={20} />
+          </div>
+          <p className="calibration-lede">
+            {calibration.calibration_size} labelled payouts fit a minimum-confidence
+            threshold at an error level of {calibration.profile.alpha}. The remaining{" "}
+            {calibration.holdout_size} were never seen by the fit and report the coverage
+            actually achieved.
+          </p>
+          <div className="calibration-metrics">
+            <div>
+              <small>Minimum confidence</small>
+              <strong>{formatPercent(calibration.profile.minimum_confidence)}</strong>
+            </div>
+            <div>
+              <small>Calibration coverage</small>
+              <strong>{formatPercent(calibration.profile.empirical_coverage)}</strong>
+            </div>
+            <div>
+              <small>Held-out coverage</small>
+              <strong>{formatPercent(calibration.holdout_coverage)}</strong>
+            </div>
+            <div>
+              <small>Single-candidate sets</small>
+              <strong>
+                {calibration.singleton_sets} / {calibration.candidate_sets.length}
+              </strong>
+            </div>
+            <div>
+              <small>Empty sets (evidence absent)</small>
+              <strong>{calibration.empty_sets}</strong>
+            </div>
+          </div>
+          <ul className="calibration-assumptions">
+            {calibration.profile.assumptions.map((assumption) => (
+              <li key={assumption}>{assumption}</li>
+            ))}
+            {calibration.caveats.map((caveat) => (
+              <li key={caveat}>{caveat}</li>
+            ))}
+          </ul>
+        </article>
+      )}
 
       <div className="caveat-panel">
         <strong>Honest limitations</strong>

@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import timedelta
 from functools import cached_property
 
+from proofledger.domain.calibration import SplitConformalCalibrator
 from proofledger.domain.controls import FinanceControlEngine
 from proofledger.domain.graph import FinancialLifecycleGraph
 from proofledger.domain.ingestion import ActivationAction, IngestionActivation
@@ -159,6 +160,100 @@ class DemoWorkspace:
             self.dataset.true_links,
             ReconciliationEngine().reconcile(self.dataset.records),
         )
+
+    def calibration(self, alpha: float = 0.10) -> dict:
+        """Split-conformal calibration over labelled settlement→bank confidences.
+
+        The labelled settlements are split in half. The first half is the calibration
+        set that produces a minimum-confidence threshold for the requested error level;
+        the second half is never seen by the fit and reports empirical coverage. The
+        threshold is then applied to the live review queue to size candidate sets.
+        """
+
+        records = self.dataset.records
+        bank_ids = {
+            record.record_id
+            for record in records
+            if record.object_type == ObjectType.BANK_CREDIT
+        }
+        settlement_ids = {
+            record.record_id
+            for record in records
+            if record.object_type == ObjectType.SETTLEMENT
+        }
+        scored: list[tuple[str, float]] = []
+        for decision in ReconciliationEngine().reconcile(records):
+            left = decision.left_record_ids[0]
+            if left not in settlement_ids:
+                continue
+            linked = [
+                record_id
+                for record_id in self.dataset.true_links.get(left, [])
+                if record_id in bank_ids
+            ]
+            if not linked:
+                continue
+            true_id = linked[0]
+            if true_id in decision.right_record_ids:
+                score = decision.confidence
+            else:
+                candidate = next(
+                    (
+                        item
+                        for item in decision.candidates
+                        if item.candidate_id == true_id
+                    ),
+                    None,
+                )
+                score = candidate.confidence if candidate else 0.0
+            scored.append((left, score))
+
+        scored.sort()
+        if len(scored) < 4:
+            raise ValueError(
+                "at least four labelled settlements are required to split-calibrate"
+            )
+        midpoint = len(scored) // 2
+        calibration_scores = [score for _, score in scored[:midpoint]]
+        holdout_scores = [score for _, score in scored[midpoint:]]
+        profile = SplitConformalCalibrator().fit(calibration_scores, alpha=alpha)
+        holdout_coverage = sum(
+            score >= profile.minimum_confidence for score in holdout_scores
+        ) / len(holdout_scores)
+
+        records_by_id = self.records_by_id
+        candidate_sets = [
+            {
+                "decision_id": decision.decision_id,
+                "settlement_record_id": decision.left_record_ids[0],
+                "decision_status": decision.status,
+                "candidates_generated": len(decision.candidates),
+                "candidate_set": [
+                    item.candidate_id
+                    for item in SplitConformalCalibrator.candidate_set(decision, profile)
+                ],
+            }
+            for decision in self.decisions
+            if decision.requires_human
+            and records_by_id[decision.left_record_ids[0]].object_type
+            == ObjectType.SETTLEMENT
+        ]
+        singleton = sum(len(item["candidate_set"]) == 1 for item in candidate_sets)
+        empty = sum(not item["candidate_set"] for item in candidate_sets)
+        return {
+            "profile": profile,
+            "calibration_size": len(calibration_scores),
+            "holdout_size": len(holdout_scores),
+            "holdout_coverage": round(holdout_coverage, 4),
+            "candidate_sets": candidate_sets,
+            "singleton_sets": singleton,
+            "empty_sets": empty,
+            "caveats": [
+                "The threshold is fitted on a labelled half and measured on the unseen half.",
+                "Coverage is a dataset-level property, never a guarantee for one payout.",
+                "A calibrated candidate set never auto-approves; it only sizes the question.",
+            ],
+        }
 
     @property
     def settlements(self) -> list[EvidenceRecord]:

@@ -46,6 +46,27 @@ def test_graph_and_benchmark_endpoints() -> None:
     assert benchmark["fuzzy"]["incorrect_auto_approvals"] > 0
 
 
+def test_calibration_endpoint_splits_labels_and_sizes_candidate_sets() -> None:
+    response = client.get("/api/v1/calibration")
+
+    assert response.status_code == 200
+    payload = response.json()
+    profile = payload["profile"]
+    assert profile["alpha"] == 0.10
+    assert profile["sample_size"] == payload["calibration_size"]
+    assert payload["holdout_size"] > 0
+    assert 0 <= payload["holdout_coverage"] <= 1
+    assert 0 <= profile["minimum_confidence"] <= 1
+    assert payload["caveats"]
+    for entry in payload["candidate_sets"]:
+        assert entry["candidates_generated"] >= len(entry["candidate_set"])
+
+
+def test_calibration_rejects_an_invalid_error_level() -> None:
+    assert client.get("/api/v1/calibration?alpha=0").status_code == 422
+    assert client.get("/api/v1/calibration?alpha=1").status_code == 422
+
+
 def test_certificate_issue_block_and_tamper_simulation() -> None:
     issued = client.post("/api/v1/settlements/setl_demo_0000/certificate")
     blocked = client.post("/api/v1/settlements/setl_demo_0002/certificate")

@@ -172,6 +172,17 @@ def benchmark(workspace: WorkspaceDependency):
     return workspace.benchmark
 
 
+@router.get("/calibration")
+def calibration(
+    workspace: WorkspaceDependency,
+    alpha: float = Query(default=0.10, gt=0, lt=1),
+):
+    try:
+        return workspace.calibration(alpha=alpha)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 @router.get("/evidence")
 def evidence(
     workspace: WorkspaceDependency,

@@ -46,6 +46,14 @@ class FieldSpec:
 
 
 SCHEMAS: dict[IngestionSource, tuple[FieldSpec, ...]] = {
+    IngestionSource.MERCHANT_ORDERS: (
+        FieldSpec("order_id", ("order id", "orderid", "order reference", "id"), True),
+        FieldSpec("amount", ("amount", "order amount", "order value", "total"), True),
+        FieldSpec("occurred_at", ("created at", "order date", "date", "timestamp"), True),
+        FieldSpec("currency", ("currency", "currency code")),
+        FieldSpec("status", ("status", "order status")),
+        FieldSpec("customer_key", ("customer", "customer id", "customer key", "buyer")),
+    ),
     IngestionSource.RAZORPAY_SETTLEMENTS: (
         FieldSpec("settlement_id", ("settlement id", "settlementid", "id"), True),
         FieldSpec("amount", ("amount", "net amount", "settled amount", "credit"), True),
@@ -57,6 +65,15 @@ SCHEMAS: dict[IngestionSource, tuple[FieldSpec, ...]] = {
         FieldSpec("fees", ("fee", "fees", "service fee")),
         FieldSpec("tax", ("tax", "gst", "fee tax")),
         FieldSpec("refunds", ("refund", "refunds", "refund amount")),
+    ),
+    IngestionSource.REFUND_REGISTER: (
+        FieldSpec("refund_id", ("refund id", "refundid", "credit note", "id"), True),
+        FieldSpec("amount", ("amount", "refund amount", "credit", "value"), True),
+        FieldSpec("occurred_at", ("created at", "refund date", "date", "timestamp"), True),
+        FieldSpec("order_id", ("order id", "orderid", "order reference"), True),
+        FieldSpec("payment_id", ("payment id", "paymentid", "payment reference"), True),
+        FieldSpec("currency", ("currency", "currency code")),
+        FieldSpec("status", ("status", "refund status")),
     ),
     IngestionSource.BANK_STATEMENT: (
         FieldSpec("external_id", ("transaction id", "bank line id", "reference", "id"), True),
@@ -446,6 +463,38 @@ class IngestionService:
             f"import_{preview.source_type.value}_{preview.file_sha256[:10]}_"
             f"{row_number - 1:06d}"
         )
+        if preview.source_type == IngestionSource.MERCHANT_ORDERS:
+            order_id = self._identifier(value("order_id"), "order_id")
+            customer_key = value("customer_key")
+            return EvidenceRecord(
+                record_id=record_id,
+                source=SourceSystem.MERCHANT,
+                object_type=ObjectType.ORDER,
+                occurred_at=occurred_at,
+                amount_paise=amount,
+                currency=currency,
+                external_id=order_id,
+                order_id=order_id,
+                status=value("status", "paid") or "paid",
+                attributes=(
+                    {"merchant_customer_key": customer_key} if customer_key else {}
+                ),
+            )
+        if preview.source_type == IngestionSource.REFUND_REGISTER:
+            refund_id = self._identifier(value("refund_id"), "refund_id")
+            return EvidenceRecord(
+                record_id=record_id,
+                source=SourceSystem.REFUNDS,
+                object_type=ObjectType.REFUND,
+                occurred_at=occurred_at,
+                amount_paise=amount,
+                currency=currency,
+                external_id=refund_id,
+                refund_id=refund_id,
+                order_id=self._identifier(value("order_id"), "order_id"),
+                payment_id=self._identifier(value("payment_id"), "payment_id"),
+                status=value("status", "processed") or "processed",
+            )
         if preview.source_type == IngestionSource.RAZORPAY_SETTLEMENTS:
             settlement_id = self._identifier(value("settlement_id"), "settlement_id")
             attributes = {}

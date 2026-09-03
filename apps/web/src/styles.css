@@ -262,6 +262,18 @@ h1, h2, h3, p { margin-top: 0; }
 .flow-object { color: white !important; background: var(--safe) !important; border: 1px solid #154d3d !important; }
 .flow-object.settlement { background: #9a762d !important; border-color: #74571f !important; }
 .flow-event { color: #555d59 !important; background: #fbfaf6 !important; border: 1px dashed #a8afac !important; }
+.flow-aggregate { background: #123f33 !important; border-color: #0c2b23 !important; font-weight: 700 !important; }
+.graph-note { justify-content: space-between; }
+.graph-note > span { flex: 1; }
+.graph-mode { flex: 0 0 auto; }
+
+.calibration-panel { margin-bottom: 14px; }
+.calibration-lede { margin: 0 0 12px; color: var(--muted); font-size: 10px; line-height: 1.65; }
+.calibration-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 9px; margin-bottom: 12px; }
+.calibration-metrics div { padding: 10px 11px; background: #f5f3ec; border: 1px solid var(--line); border-radius: 9px; }
+.calibration-metrics small { display: block; margin-bottom: 4px; color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .04em; }
+.calibration-metrics strong { font-size: 15px; }
+.calibration-assumptions { margin: 0; padding-left: 15px; color: var(--muted); font-size: 9px; line-height: 1.8; }
 
 .benchmark-table { margin-bottom: 14px; }
 .benchmark-table tbody tr { cursor: default; }

@@ -13,7 +13,9 @@ from proofledger.domain.models import stable_hash
 
 
 class IngestionSource(str, Enum):
+    MERCHANT_ORDERS = "merchant_orders"
     RAZORPAY_SETTLEMENTS = "razorpay_settlements"
+    REFUND_REGISTER = "refund_register"
     BANK_STATEMENT = "bank_statement"
     GENERAL_LEDGER = "general_ledger"
 
