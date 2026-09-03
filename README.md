@@ -222,6 +222,9 @@ npm run build
 
 ## Deployment
 
+Step-by-step instructions, including the free-tier behaviour that matters when recording a demo,
+are in docs/deployment.md.
+
 - Backend: Dockerfile and render.yaml are included for Render.
 - Frontend: deploy apps/web to Vercel and set VITE_API_BASE_URL to the deployed API URL
   followed by /api/v1.
@@ -245,6 +248,7 @@ See docs/limitations.md and docs/threat-model.md before treating this as product
 ## Documentation
 
 - docs/architecture.md — system boundaries and data flow
+- docs/deployment.md — Render and Vercel walkthrough
 - docs/control-catalog.md — all ten authoritative controls
 - docs/evaluation.md — benchmark protocol and caveats
 - docs/demo-script.md — six-minute judge walkthrough
