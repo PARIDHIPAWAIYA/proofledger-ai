@@ -14,22 +14,25 @@ The product thesis is simple: **finance teams need proof, not a confident-lookin
 Generic reconciliation tools flatten rows and return a match score. ProofLedger instead:
 
 1. Reconstructs an object/event graph across five financial sources.
-2. Stages real CSV exports behind size, encoding, shape, and row-validation boundaries.
-3. Suggests schema mappings from headers only, then requires controller confirmation.
-4. Atomically normalizes accepted rows and seals them in an Ed25519-signed manifest.
-5. Separates signing from authority through a hashed controller activation event.
-6. Recomputes graphs, matches, controls, reviews, journals, and certificates after activation.
-7. Rejects duplicate bank rows that attempt to mask a known source mismatch.
-8. Persists signed batches and ordered activation authority through API restarts.
-9. Applies exact and composite evidence before any probabilistic assistance.
-10. Abstains when candidate evidence is unsafe or ambiguous.
-11. Asks the smallest question likely to resolve that uncertainty.
-12. Hashes controller evidence separately, preserves the original source row, and recomputes.
-13. Enforces ten deterministic accounting and lifecycle controls.
-14. Proposes a balanced journal that remains pending human approval.
-15. Issues a proof-carrying settlement certificate only when critical controls pass.
-16. Detects if any imported or certified evidence changes—even by ₹1.
-17. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
+2. Imports all five of them — orders, settlements, refunds, bank statements, and ledger — as
+   separately signed, separately approved, separately reversible batches.
+3. Stages real CSV exports behind size, encoding, shape, and row-validation boundaries.
+4. Suggests schema mappings from headers only, then requires controller confirmation.
+5. Atomically normalizes accepted rows and seals them in an Ed25519-signed manifest.
+6. Separates signing from authority through a hashed controller activation event.
+7. Recomputes graphs, matches, controls, reviews, journals, and certificates after activation.
+8. Rejects duplicate bank rows that attempt to mask a known source mismatch.
+9. Persists signed batches and ordered activation authority through API restarts.
+10. Applies exact and composite evidence before any probabilistic assistance.
+11. Abstains when candidate evidence is unsafe or ambiguous.
+12. Reports that abstention boundary through split-conformal calibration on held-out labels.
+13. Asks the smallest question likely to resolve that uncertainty.
+14. Hashes controller evidence separately, preserves the original source row, and recomputes.
+15. Enforces ten deterministic accounting and lifecycle controls.
+16. Proposes a balanced journal that remains pending human approval.
+17. Issues a proof-carrying settlement certificate only when critical controls pass.
+18. Detects if any imported or certified evidence changes—even by ₹1.
+19. Benchmarks safety using incorrect automatic approvals, not only aggregate accuracy.
 
 ## Demo result
 
@@ -37,7 +40,17 @@ The deterministic seed creates more than 1,200 records across merchant orders,
 Razorpay-shaped reconciliation, refunds, bank statements, and a general ledger. It injects
 missing bank evidence, a ₹1 amount difference, absent references, and a duplicate journal.
 
-On the included held-out scenario:
+The default workspace (`seed 2026`, 600 orders, 12 settlement batches) is what the running
+application and the deployed demo report:
+
+| Method | Precision | Recall | F1 | Human review | Wrong auto-approvals |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Exact ID baseline | 100% | 72.7% | 84.2% | 0% | 0 |
+| Fuzzy narration baseline | 75% | 81.8% | 78.3% | 0% | 3 |
+| **ProofLedger** | **100%** | **100%** | **100%** | **16.7%** | **0** |
+
+The smaller reproducible CLI configuration (`--seed 11 --orders 120 --settlement-size 20`,
+6 settlement batches) is harder for the baselines and is what the test suite pins:
 
 | Method | Precision | Recall | F1 | Human review | Wrong auto-approvals |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -45,8 +58,14 @@ On the included held-out scenario:
 | Fuzzy narration baseline | 50% | 60% | 54.6% | 0% | 3 |
 | **ProofLedger** | **100%** | **100%** | **100%** | **33.3%** | **0** |
 
-These numbers are from synthetic data and are not presented as production performance.
-The committed benchmark exposes its labels, methods, and caveats for inspection.
+The invariant across both configurations is the one that costs money: fuzzy matching produces
+three silent incorrect auto-approvals, and ProofLedger produces none. These numbers are from
+synthetic data and are not presented as production performance. The committed benchmark exposes
+its labels, methods, and caveats for inspection.
+
+`GET /api/v1/calibration` fits a split-conformal minimum-confidence threshold on half the
+labelled payouts and reports coverage on the half the fit never saw, then sizes the candidate
+set behind every open review question at that threshold.
 
 ## Product tour
 
@@ -55,8 +74,12 @@ The committed benchmark exposes its labels, methods, and caveats for inspection.
   signed manifest export, ₹1 tamper lab, audited activation, and live close recomputation.
 - **Settlement book:** payout-by-payout evidence, controls, and balanced journal proposals.
 - **Evidence review:** attach the missing bank row, verify its UTR, and watch the close recompute.
-- **Lifecycle graph:** interactive order → payment → settlement → bank → ledger traversal.
-- **Safety benchmark:** exact, fuzzy, and ProofLedger outcomes side by side.
+- **Lifecycle graph:** order → payment → refund → settlement → bank → ledger, laid out by stage.
+  The default spine folds a payout's member records into stage totals; one toggle expands every
+  record and source event.
+- **Safety benchmark:** exact, fuzzy, and ProofLedger outcomes side by side, plus the
+  split-conformal threshold, its held-out coverage, and the candidate-set size behind each open
+  review question.
 - **Certificate lab:** issue a valid close certificate, change one source by ₹1, and watch
   verification fail.
 
@@ -84,7 +107,7 @@ Five source systems
             └─> verified + controller-activated authority
                  └─> object-centric lifecycle graph
                       ├─> exact / composite reconciliation
-                      ├─> calibrated candidate sets + safe abstention
+                      ├─> deterministic safe abstention (split-conformal reports on it)
                       ├─> ten deterministic finance controls
                       └─> minimum-evidence controller review
                            ├─> balanced journal proposal
@@ -191,6 +214,7 @@ npm run build
 | POST /api/v1/ingestion/manifests/{id}/activate | Verify, audit, activate, and recompute the workspace |
 | POST /api/v1/ingestion/manifests/{id}/deactivate | Audit removal and recompute downstream results |
 | GET /api/v1/benchmark | Held-out baseline comparison |
+| GET /api/v1/calibration | Split-conformal threshold, held-out coverage, and candidate-set sizes |
 | GET /api/v1/graph/{id} | Lifecycle graph for one settlement |
 | POST /api/v1/settlements/{id}/certificate | Issue certificate or return a blocking control |
 | POST /api/v1/certificates/{id}/verify | Verify evidence; optionally simulate ₹1 tampering |

@@ -25,14 +25,15 @@ protects the batch, and a separately audited controller action decides whether i
 
 ## 1:30–2:10 — One graph across five systems
 
-Open **Lifecycle graph** on settlement 0000.
+Open **Lifecycle graph** on settlement 0000. The default **Lifecycle spine** reads left to right:
 
-Explain event nodes versus business objects and trace:
+50 merchant orders → 50 captured payments → 3 refunds → settlement → bank credit → journal.
 
-order → captured payment → settlement → bank credit → journal.
+Point at the folded counts, then switch to **Every record** to show the same component with all
+206 member records and source events expanded.
 
 Key sentence: “A refund and a payout do not fit one spreadsheet case ID, so the graph preserves
-their real many-to-many lifecycle.”
+their real many-to-many lifecycle — folded for reading, expandable for proof.”
 
 ## 2:10–2:50 — Deterministic controls
 
@@ -86,13 +87,16 @@ Explain:
 - fuzzy matching boosts recall but silently auto-approves wrong rows;
 - ProofLedger sends uncertainty to review and has zero wrong auto-approvals in this scenario.
 
-State clearly that results are synthetic.
+Scroll to **split-conformal calibration** and say: “The abstention threshold is not a number I
+picked. It is fitted on half the labelled payouts and measured on the half the fit never saw.”
+
+State clearly that results are synthetic, and name which configuration the numbers came from.
 
 ## 5:25–6:00 — AI boundary and job signal
 
 “AI only explains deterministic exceptions and suggests mappings from header names. It cannot see
 transaction rows or approve imports, matches, journals, or financial close. The repository includes
-domain invariants, 35 backend/API tests, frontend lint/tests/build, restart-persistence tests, CI, a production dependency
+domain invariants, 39 backend/API tests, frontend lint/tests/build, restart-persistence tests, CI, a production dependency
 audit, Docker deployment, and honest limitations.”
 
 Finish on the dashboard with: “ProofLedger is not another finance chatbot. It is an evidence and

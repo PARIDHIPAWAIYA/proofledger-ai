@@ -47,6 +47,15 @@ instead of trusting the stored value.
 
 ## Ingestion boundary
 
+All five source systems can be imported: merchant orders, Razorpay settlements, the refund
+register, bank statements, and the general ledger. Each has its own canonical schema, alias set,
+and required fields, so a ledger export cannot be committed as a bank statement.
+
+Imports are deliberately one source per manifest. Each file therefore carries its own signature,
+its own controller approval, and its own reversal, and the audit trail records which specific
+source a controller admitted. Activating any single source re-runs reconciliation and all ten
+controls across every active source together.
+
 The intake service accepts UTF-8 CSV/TSV/text exports up to 5 MB, 10,000 rows, 60 columns, and
 5,000 characters per cell. It rejects NUL bytes, duplicate/empty headers, ragged rows, invalid
 dates, negative amounts, reused mappings, and incomplete required schemas. Preview is a staging
@@ -99,6 +108,16 @@ This avoids forcing a refund, settlement, and ledger line into one artificial ca
 4. **Abstained:** absent, low-confidence, or near-tied candidates.
 
 An invariant in the domain model rejects any semantic decision marked auto-approved.
+
+The live abstention boundary is deterministic: a fixed safe-confidence floor plus a
+near-tie margin between the top two candidates. It does not consult the calibrator, because a
+runtime match must not depend on labelled data.
+
+Calibration is a separate, explicitly labelled evaluation surface. `GET /api/v1/calibration`
+splits the labelled payouts, fits a split-conformal minimum-confidence threshold on one half,
+measures coverage on the unseen half, and reports the candidate-set size that threshold would
+produce for each open review question. It reports on the abstention boundary; it does not
+override it.
 
 ## AI boundary
 
