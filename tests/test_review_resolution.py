@@ -5,6 +5,47 @@ from proofledger.services.closing import SettlementCertificateService
 from proofledger.services.workspace import DemoWorkspace
 
 
+def test_derived_views_are_cached_until_the_evidence_changes() -> None:
+    workspace = DemoWorkspace(seed=11, order_count=120, settlement_size=20)
+
+    # Repeated reads of an unchanged workspace reuse one computation.
+    assert workspace.controls is workspace.controls
+    assert workspace.decisions is workspace.decisions
+    assert workspace.graph is workspace.graph
+    assert workspace.effective_records is workspace.effective_records
+
+    controls_before = workspace.controls
+    blocked = workspace.settlement("setl_demo_0001")
+    assert blocked is not None
+    assert workspace.settlement_summary(blocked)["status"] == "blocked"
+
+    decision = next(
+        item
+        for item in workspace.decisions
+        if blocked.record_id in item.left_record_ids
+    )
+    question = next(
+        item for item in workspace.questions if item.decision_id == decision.decision_id
+    )
+    workspace.resolve_review(
+        question.question_id,
+        candidate_id=None,
+        bank_reference=blocked.bank_reference,
+        amount_paise=blocked.amount_paise,
+        occurred_at=blocked.occurred_at,
+        external_id="cache_invalidation_bank_row",
+        evidence_sha256="d" * 64,
+        actor="controller@demo",
+        rationale="Attaching the missing statement row to test recomputation.",
+    )
+
+    # A controller action must invalidate every derived view, not serve a stale one.
+    assert workspace.controls is not controls_before
+    resolved = workspace.settlement("setl_demo_0001")
+    assert resolved is not None
+    assert workspace.settlement_summary(resolved)["status"] == "ready"
+
+
 def _workspace() -> DemoWorkspace:
     return DemoWorkspace(seed=11, order_count=120, settlement_size=20)
 

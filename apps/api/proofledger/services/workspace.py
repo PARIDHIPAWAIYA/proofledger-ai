@@ -42,6 +42,8 @@ class DemoWorkspace:
         )
         self.certificates: dict[str, SettlementCertificate] = {}
         self.review_resolutions: dict[str, ReviewResolution] = {}
+        self._derived_cache: dict[str, object] = {}
+        self._derived_key: tuple | None = None
         self.repository = repository
         self.ingestion = IngestionService(repository)
         self.active_manifest_ids: set[str] = set()
@@ -62,6 +64,37 @@ class DemoWorkspace:
             else:
                 self.active_manifest_ids.discard(event.manifest_id)
 
+    def _state_key(self) -> tuple:
+        """Identify the inputs every derived view depends on.
+
+        The seeded dataset is fixed for the life of the workspace, so only two
+        things can change what reconciliation, controls, and the graph produce:
+        which signed imports carry authority, and which review questions a
+        controller has answered.
+        """
+
+        return (
+            tuple(sorted(self.active_manifest_ids)),
+            tuple(sorted(self.review_resolutions)),
+        )
+
+    def _derived(self, name: str, build):
+        """Memoize a derived view until the authoritative evidence changes.
+
+        Deriving the graph, the ten controls, and the full reconciliation costs
+        roughly the same as building them once per request. Rendering the
+        settlement book asks for them once per payout, so without this the work
+        is repeated a dozen times for a single response.
+        """
+
+        key = self._state_key()
+        if self._derived_key != key:
+            self._derived_cache.clear()
+            self._derived_key = key
+        if name not in self._derived_cache:
+            self._derived_cache[name] = build()
+        return self._derived_cache[name]
+
     @property
     def active_import_records(self) -> list[EvidenceRecord]:
         return [
@@ -72,16 +105,25 @@ class DemoWorkspace:
 
     @property
     def source_records(self) -> list[EvidenceRecord]:
-        return [*self.dataset.records, *self.active_import_records]
+        return self._derived(
+            "source_records",
+            lambda: [*self.dataset.records, *self.active_import_records],
+        )
 
     @property
     def source_records_by_id(self) -> dict[str, EvidenceRecord]:
-        return {record.record_id: record for record in self.source_records}
+        return self._derived(
+            "source_records_by_id",
+            lambda: {record.record_id: record for record in self.source_records},
+        )
 
     @property
     def effective_records(self) -> list[EvidenceRecord]:
         """Return a derived evidence view while preserving every original source row."""
 
+        return self._derived("effective_records", self._build_effective_records)
+
+    def _build_effective_records(self) -> list[EvidenceRecord]:
         resolutions_by_candidate = {
             resolution.candidate_record_id: resolution
             for resolution in self.review_resolutions.values()
@@ -135,23 +177,38 @@ class DemoWorkspace:
 
     @property
     def records_by_id(self) -> dict[str, EvidenceRecord]:
-        return {record.record_id: record for record in self.effective_records}
+        return self._derived(
+            "records_by_id",
+            lambda: {record.record_id: record for record in self.effective_records},
+        )
 
     @property
     def graph(self) -> FinancialLifecycleGraph:
-        return FinancialLifecycleGraph.from_records(self.effective_records)
+        return self._derived(
+            "graph",
+            lambda: FinancialLifecycleGraph.from_records(self.effective_records),
+        )
 
     @property
     def controls(self):
-        return FinanceControlEngine().evaluate(self.effective_records)
+        return self._derived(
+            "controls",
+            lambda: FinanceControlEngine().evaluate(self.effective_records),
+        )
 
     @property
     def decisions(self):
-        return ReconciliationEngine().reconcile(self.effective_records)
+        return self._derived(
+            "decisions",
+            lambda: ReconciliationEngine().reconcile(self.effective_records),
+        )
 
     @property
     def questions(self):
-        return MinimumEvidenceReviewPlanner().questions(self.decisions)
+        return self._derived(
+            "questions",
+            lambda: MinimumEvidenceReviewPlanner().questions(self.decisions),
+        )
 
     @cached_property
     def benchmark(self):
@@ -257,11 +314,14 @@ class DemoWorkspace:
 
     @property
     def settlements(self) -> list[EvidenceRecord]:
-        return [
-            record
-            for record in self.effective_records
-            if record.object_type == ObjectType.SETTLEMENT
-        ]
+        return self._derived(
+            "settlements",
+            lambda: [
+                record
+                for record in self.effective_records
+                if record.object_type == ObjectType.SETTLEMENT
+            ],
+        )
 
     def settlement(self, settlement_id: str) -> EvidenceRecord | None:
         return next(
