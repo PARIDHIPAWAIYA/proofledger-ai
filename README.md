@@ -256,7 +256,6 @@ See docs/limitations.md and docs/threat-model.md before treating this as product
 - docs/deployment.md — Render and Vercel walkthrough
 - docs/control-catalog.md — all ten authoritative controls
 - docs/evaluation.md — benchmark protocol and caveats
-- docs/demo-script.md — six-minute judge walkthrough
 - docs/threat-model.md — abuse cases and mitigations
 - docs/decisions.md — architecture decision records
 

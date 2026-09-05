@@ -35,3 +35,6 @@ Thumbs.db
 artifacts/
 coverage/
 
+
+# Presentation notes kept out of the repository
+docs/demo-script.md
