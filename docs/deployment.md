@@ -1,9 +1,21 @@
 # Deployment
 
-Two services: the FastAPI backend on Render, the React console on Vercel. Neither needs a Gemini
-key — the deterministic fallback keeps every feature working.
+Two pieces:
 
-Both steps require signing in through a browser, so run them from your own machine.
+- **Console** — static build, deployed to GitHub Pages by `.github/workflows/pages.yml`.
+  Already live at https://paridhipawaiya.github.io/proofledger-ai/ and needs no third-party
+  account. Vercel remains a supported alternative and is documented at the end.
+- **Backend** — FastAPI, needs a persistent process, deployed to Render from `render.yaml`.
+
+Neither needs a Gemini key; the deterministic fallback keeps every feature working.
+
+## Why the backend cannot be serverless
+
+The API keeps state in the running process, not only in the database: staged CSV previews between
+preview and commit, the per-process Ed25519 manifest signing key, issued certificates, and review
+resolutions. A serverless platform can route consecutive requests to different instances, which
+would break upload → map → sign → verify → activate in ways that look like random failure. Deploy
+it as one long-lived container.
 
 ## 1. Backend on Render
 
@@ -22,21 +34,19 @@ https://<your-service>.onrender.com/docs            → OpenAPI console
 
 Record the base URL. You come back in step 3 to set CORS.
 
-## 2. Frontend on Vercel
+## 2. Point the console at it
 
-1. Sign in at https://vercel.com with GitHub and import the same repository.
-2. Set **Root Directory** to `apps/web`. This is the one setting that is easy to miss; without it
-   the build cannot find `package.json`.
-3. Framework preset resolves to Vite from `apps/web/vercel.json`. Leave the build command and
-   output directory alone.
-4. Add one environment variable:
+`VITE_API_BASE_URL` is inlined into the bundle at build time, so it lives in a repository variable
+and takes effect on the next Pages build:
 
-   | Name | Value |
-   | --- | --- |
-   | `VITE_API_BASE_URL` | `https://<your-service>.onrender.com/api/v1` |
+~~~powershell
+gh variable set VITE_API_BASE_URL --repo <owner>/proofledger-ai `
+  --body "https://<your-service>.onrender.com/api/v1"
+gh workflow run pages.yml --repo <owner>/proofledger-ai
+~~~
 
-   Vite inlines this at build time, so changing it later requires a redeploy.
-5. Deploy, then record the frontend URL.
+Or set it under **Settings → Secrets and variables → Actions → Variables** and re-run the
+"Operator console on GitHub Pages" workflow.
 
 ## 3. Close the CORS loop
 
@@ -44,10 +54,13 @@ Back in Render → `proofledger-api` → **Environment**, set:
 
 | Name | Value |
 | --- | --- |
-| `PROOFLEDGER_CORS_ORIGINS` | your Vercel URL, no trailing slash |
+| `PROOFLEDGER_CORS_ORIGINS` | `https://<owner>.github.io`, no trailing slash and no path |
+
+A browser sends only the scheme and host as the `Origin` header, so the Pages project sub-path is
+not part of this value.
 
 Add `PROOFLEDGER_DATABASE_URL` here too if you attach managed PostgreSQL. Save and let the
-service restart, then reload the frontend. The dashboard should populate.
+service restart, then reload the console. The dashboard should populate.
 
 ## 4. Optional: bounded Gemini
 
@@ -78,6 +91,13 @@ curl https://<your-service>.onrender.com/api/v1/calibration
 
 Then open the Vercel URL and walk the demo script end to end: intake → sign → tamper → activate →
 review → certificate → benchmark.
+
+## Alternative: console on Vercel
+
+`apps/web/vercel.json` is kept for this. Import the repository at https://vercel.com, set **Root
+Directory** to `apps/web` — the one setting that is easy to miss, and without it the build cannot
+find `package.json` — and add `VITE_API_BASE_URL` as a project environment variable. Then set
+`PROOFLEDGER_CORS_ORIGINS` on Render to the Vercel origin instead of the Pages one.
 
 ## Local container
 

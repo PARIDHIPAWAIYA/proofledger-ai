@@ -2,6 +2,11 @@
 
 > Object-centric, uncertainty-aware financial close controller for Razorpay merchants.
 
+**Live console:** https://paridhipawaiya.github.io/proofledger-ai/
+
+The console is a static build and needs the API to be reachable. If it reports that the workspace
+could not load, the backend is asleep or not yet configured — see docs/deployment.md.
+
 ProofLedger reconstructs how merchant orders become captured payments, refunds, settlements,
 bank credits, and accounting entries. It combines deterministic finance controls, calibrated
 matching, minimum-evidence human review, bounded Gemini explanations, and independently
