@@ -9,7 +9,7 @@ import {
 } from "@xyflow/react";
 import { GitBranch, Info } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, apiWithWakeRetry } from "../api";
 import type { GraphData, SettlementSummary } from "../types";
 import { ErrorState, LoadingState, PageHeader } from "./Shared";
 
@@ -60,10 +60,16 @@ function EvidenceGraphPage() {
   const [graph, setGraph] = useState<GraphData | null>(null);
   const [spineOnly, setSpineOnly] = useState(true);
   const [error, setError] = useState("");
+  const [waking, setWaking] = useState("");
 
   useEffect(() => {
-    api<SettlementSummary[]>("/settlements")
-      .then(setSettlements)
+    apiWithWakeRetry<SettlementSummary[]>("/settlements", (attempt, total) =>
+      setWaking(`Waking the evidence API… attempt ${attempt} of ${total}`),
+    )
+      .then((next) => {
+        setWaking("");
+        setSettlements(next);
+      })
       .catch((reason: Error) => setError(reason.message));
   }, []);
 
@@ -164,7 +170,7 @@ function EvidenceGraphPage() {
   }, [graph, spineOnly]);
 
   if (error) return <ErrorState message={error} />;
-  if (!settlements.length) return <LoadingState />;
+  if (!settlements.length) return <LoadingState note={waking || undefined} />;
 
   return (
     <div className="page graph-page">

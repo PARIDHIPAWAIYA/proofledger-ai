@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { api, formatMoney } from "../api";
+import { api, apiWithWakeRetry, formatMoney } from "../api";
 import type { SettlementDetail, SettlementSummary } from "../types";
 import {
   ErrorState,
@@ -34,10 +34,16 @@ function SettlementsPage() {
   const [certificateId, setCertificateId] = useState("");
   const [verification, setVerification] = useState<Verification | null>(null);
   const [busy, setBusy] = useState(false);
+  const [waking, setWaking] = useState("");
 
   useEffect(() => {
-    api<SettlementSummary[]>("/settlements")
-      .then(setSettlements)
+    apiWithWakeRetry<SettlementSummary[]>("/settlements", (attempt, total) =>
+      setWaking(`Waking the evidence API… attempt ${attempt} of ${total}`),
+    )
+      .then((next) => {
+        setWaking("");
+        setSettlements(next);
+      })
       .catch((reason: Error) => setError(reason.message));
   }, []);
 
@@ -102,7 +108,7 @@ function SettlementsPage() {
   };
 
   if (error) return <ErrorState message={error} />;
-  if (!settlements.length) return <LoadingState />;
+  if (!settlements.length) return <LoadingState note={waking || undefined} />;
 
   return (
     <div className="page">

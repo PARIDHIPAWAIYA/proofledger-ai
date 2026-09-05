@@ -10,7 +10,7 @@ import {
   UploadCloud,
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { api, formatMoney, formatPercent } from "../api";
+import { api, apiWithWakeRetry, formatMoney, formatPercent } from "../api";
 import { evidenceFingerprint } from "../reviewEvidence";
 import type {
   Review,
@@ -33,12 +33,16 @@ function ReviewPage() {
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [waking, setWaking] = useState("");
 
   const loadWorkspace = useCallback(async () => {
-    const [nextReviews, nextHistory] = await Promise.all([
-      api<Review[]>("/reviews"),
-      api<ReviewResolution[]>("/reviews/history"),
-    ]);
+    // Retries only matter on the first load; once the service is awake this
+    // succeeds on the first attempt and costs nothing after a resolution.
+    const nextReviews = await apiWithWakeRetry<Review[]>("/reviews", (attempt, total) =>
+      setWaking(`Waking the evidence API… attempt ${attempt} of ${total}`),
+    );
+    setWaking("");
+    const nextHistory = await api<ReviewResolution[]>("/reviews/history");
     setReviews(nextReviews);
     setHistory(nextHistory);
     setDrafts((current) => {
@@ -125,7 +129,7 @@ function ReviewPage() {
   };
 
   if (error) return <ErrorState message={error} />;
-  if (!loaded) return <LoadingState />;
+  if (!loaded) return <LoadingState note={waking || undefined} />;
 
   return (
     <div className="page">

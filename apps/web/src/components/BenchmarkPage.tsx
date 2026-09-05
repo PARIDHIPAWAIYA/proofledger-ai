@@ -1,6 +1,6 @@
 import { FlaskConical, Ruler, ShieldCheck, TriangleAlert } from "lucide-react";
 import { useEffect, useState } from "react";
-import { api, formatPercent } from "../api";
+import { api, apiWithWakeRetry, formatPercent } from "../api";
 import type { Benchmark, BenchmarkMetric, Calibration } from "../types";
 import { ErrorState, LoadingState, PageHeader } from "./Shared";
 
@@ -27,18 +27,34 @@ function BenchmarkPage() {
   const [benchmark, setBenchmark] = useState<Benchmark | null>(null);
   const [calibration, setCalibration] = useState<Calibration | null>(null);
   const [error, setError] = useState("");
+  const [waking, setWaking] = useState("");
 
   useEffect(() => {
-    api<Benchmark>("/benchmark")
-      .then(setBenchmark)
-      .catch((reason: Error) => setError(reason.message));
-    api<Calibration>("/calibration")
-      .then(setCalibration)
-      .catch(() => setCalibration(null));
+    let cancelled = false;
+    apiWithWakeRetry<Benchmark>("/benchmark", (attempt, total) => {
+      if (!cancelled) setWaking(`Waking the evidence API… attempt ${attempt} of ${total}`);
+    })
+      .then((next) => {
+        if (cancelled) return;
+        setWaking("");
+        setBenchmark(next);
+        // Calibration is supplementary: the baseline table stands without it.
+        api<Calibration>("/calibration")
+          .then((profile) => {
+            if (!cancelled) setCalibration(profile);
+          })
+          .catch(() => undefined);
+      })
+      .catch((reason: Error) => {
+        if (!cancelled) setError(reason.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   if (error) return <ErrorState message={error} />;
-  if (!benchmark) return <LoadingState />;
+  if (!benchmark) return <LoadingState note={waking || undefined} />;
 
   return (
     <div className="page">
