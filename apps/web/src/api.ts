@@ -24,6 +24,33 @@ export async function api<T>(
   return response.json() as Promise<T>;
 }
 
+/**
+ * Retry a first page load through a backend cold start.
+ *
+ * A free-tier container sleeps after inactivity and takes tens of seconds to
+ * accept traffic again, so the first visitor of the day would otherwise meet a
+ * hard error on a service that is merely waking. Only idempotent reads should
+ * use this; it must never wrap an import, a review resolution, or a close.
+ */
+export async function apiWithWakeRetry<T>(
+  path: string,
+  onAttempt?: (attempt: number, total: number) => void,
+  attempts = 5,
+): Promise<T> {
+  let lastError: Error = new Error("Request was never attempted");
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await api<T>(path);
+    } catch (reason) {
+      lastError = reason instanceof Error ? reason : new Error(String(reason));
+      if (attempt === attempts) break;
+      onAttempt?.(attempt, attempts);
+      await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+    }
+  }
+  throw lastError;
+}
+
 export function formatMoney(paise: number, compact = false): string {
   const rupees = paise / 100;
   return new Intl.NumberFormat("en-IN", {

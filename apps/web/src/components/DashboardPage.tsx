@@ -19,7 +19,7 @@ import {
   YAxis,
 } from "recharts";
 import type { Page } from "../App";
-import { api, formatMoney, formatPercent } from "../api";
+import { api, apiWithWakeRetry, formatMoney, formatPercent } from "../api";
 import type { Benchmark, Overview, SettlementSummary } from "../types";
 import {
   ErrorState,
@@ -38,14 +38,20 @@ function DashboardPage({
   const [settlements, setSettlements] = useState<SettlementSummary[]>([]);
   const [benchmark, setBenchmark] = useState<Benchmark | null>(null);
   const [error, setError] = useState("");
+  const [waking, setWaking] = useState("");
 
   useEffect(() => {
-    Promise.all([
-      api<Overview>("/overview"),
-      api<SettlementSummary[]>("/settlements"),
-      api<Benchmark>("/benchmark"),
-    ])
-      .then(([nextOverview, nextSettlements, nextBenchmark]) => {
+    // The dashboard is the first request a visitor makes, so it absorbs a cold
+    // start on the API's behalf. Every later page assumes the service is awake.
+    apiWithWakeRetry<Overview>("/overview", (attempt, total) =>
+      setWaking(`Waking the evidence API… attempt ${attempt} of ${total}`),
+    )
+      .then(async (nextOverview) => {
+        setWaking("");
+        const [nextSettlements, nextBenchmark] = await Promise.all([
+          api<SettlementSummary[]>("/settlements"),
+          api<Benchmark>("/benchmark"),
+        ]);
         setOverview(nextOverview);
         setSettlements(nextSettlements);
         setBenchmark(nextBenchmark);
@@ -54,7 +60,7 @@ function DashboardPage({
   }, []);
 
   if (error) return <ErrorState message={error} />;
-  if (!overview || !benchmark) return <LoadingState />;
+  if (!overview || !benchmark) return <LoadingState note={waking || undefined} />;
 
   const chartData = settlements.map((settlement) => ({
     id: settlement.settlement_id.replace("setl_demo_", "#"),

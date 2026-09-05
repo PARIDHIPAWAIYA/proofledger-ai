@@ -1,8 +1,54 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { api, formatMoney, formatPercent } from "./api";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { api, apiWithWakeRetry, formatMoney, formatPercent } from "./api";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe("cold-start retry", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("returns the payload once a waking service starts answering", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+      .mockResolvedValue(
+        new Response(JSON.stringify({ evidence_records: 1272 }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const onAttempt = vi.fn();
+
+    const pending = apiWithWakeRetry<{ evidence_records: number }>(
+      "/overview",
+      onAttempt,
+    );
+    await vi.runAllTimersAsync();
+
+    expect(await pending).toEqual({ evidence_records: 1272 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(onAttempt).toHaveBeenCalledWith(1, 5);
+  });
+
+  it("gives up with the last error rather than retrying forever", async () => {
+    const fetchMock = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = apiWithWakeRetry("/overview", undefined, 3);
+    const assertion = expect(pending).rejects.toThrow("Failed to fetch");
+    await vi.runAllTimersAsync();
+    await assertion;
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe("finance formatters", () => {

@@ -24,11 +24,11 @@ export function PageHeader({
   );
 }
 
-export function LoadingState() {
+export function LoadingState({ note }: { note?: string } = {}) {
   return (
     <div className="state-panel">
       <LoaderCircle className="spin" size={24} />
-      <span>Reconstructing financial evidence…</span>
+      <span>{note ?? "Reconstructing financial evidence…"}</span>
     </div>
   );
 }
@@ -38,8 +38,14 @@ export function ErrorState({ message }: { message: string }) {
     <div className="state-panel error">
       <AlertTriangle size={22} />
       <div>
-        <strong>Could not load workspace</strong>
+        <strong>Could not reach the evidence API</strong>
         <p>{message}</p>
+        <p className="state-hint">
+          The console never fabricates figures, so it shows nothing rather than a
+          placeholder close. If this is a free-tier host, the service may be waking from
+          sleep—reload in a minute. The reconciliation engine also runs entirely offline:
+          see the repository README to start it locally.
+        </p>
       </div>
     </div>
   );
